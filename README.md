@@ -1,6 +1,6 @@
 # Sugar MCP Server
 
-This is an **MCP (Model Context Protocol)** server to interact with [Sugar](https://github.com/velodrome-finance/sugar-sdk?tab=readme-ov-file#using-sugar)  
+This is an **MCP (Model Context Protocol)** server to interact with [Sugar](https://github.com/velodrome-finance/sugar-sdk)  
 Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 
 
