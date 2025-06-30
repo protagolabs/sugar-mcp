@@ -24,4 +24,22 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 - get_quote: Retrieve the best quote for swapping a given amount from one token to another.
 - swap: Execute a token swap transaction.
 
+### Usage
+```json
+{
+  "mcpServers": {
+    "sugar-mcp": {
+      "env": {
+        "SUGAR_PK": "xxx",
+        "SUGAR_RPC_URI_10": "optionally, the RPC URI for the SUGAR service"
+      },
+      "command": "uvx",
+      "args": [
+        "sugar-mcp"  // 暂时未发布到pypi
+      ]
+    }
+  }
+}
+```
+
 
