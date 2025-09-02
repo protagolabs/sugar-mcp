@@ -35,7 +35,7 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
       },
       "command": "uvx",
       "args": [
-        "sugar-mcp"  // 暂时未发布到pypi
+        "sugar-mcp"
       ]
     }
   }
