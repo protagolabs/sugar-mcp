@@ -204,7 +204,7 @@ def main():
     if not os.environ.get('SUGAR_PK'):
         raise ValueError("Environment variable SUGAR_PK is not set. Please set it to your private key.")
     print("Starting Sugar MCP server...")
-    mcp.run(transport="sse")
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
