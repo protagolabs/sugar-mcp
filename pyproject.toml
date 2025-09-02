@@ -11,7 +11,7 @@ readme = "README.md"
 requires-python = ">=3.11,<4"
 dependencies = [
     "mcp (>=1.6.0,<2.0.0)",
-    "sugar @ git+https://github.com/velodrome-finance/sugar-sdk.git@v0.2.3",
+    "sugar-sdk (==0.2.3)",
     "web3 (==7.12.0)"
 ]
 
