@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sugar.token import Token as S_Token
+from netmind_sugar.token import Token as S_Token
 from dataclasses import dataclass, asdict
 
 
