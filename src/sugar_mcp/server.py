@@ -261,39 +261,52 @@ async def get_pool_epochs(
 
 @mcp.tool()
 async def get_quote(
-    from_token: Literal["usdc", "velo", "eth"],
-    to_token: Literal["usdc", "velo", "eth"],
-    amount: float,
+    from_token: str,
+    to_token: str,
+    amount: int,
     chain_id: str = "10",
 ):
     """
     Retrieve the best quote for swapping a given amount from one token to another.
 
     Args:
-        from_token (Token): The token to swap from.
-        to_token (Token): The token to swap to.
-        amount (float): The amount to swap (in float, not uint256).
+        from_token (str): The token to swap from. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
+        to_token (str): The token to swap to. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
+        amount (int): The amount to swap (in int, not uint256).
         chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
         filter_quotes (Callable[[Quote], bool], optional): Optional filter to apply on the quotes.
 
     Returns:
         Optional[Quote]: The best available quote, or None if no valid quote was found.
     """
-    from_token = getattr(OPChain, from_token, None)
-    to_token = getattr(OPChain, to_token, None)
-    if from_token is None or to_token is None:
-        raise ValueError("Invalid token specified. Use 'usdc', 'velo', or 'eth'.")
+    
+    if chain_id == "10" and (from_token not in ["usdc", "velo", "eth", "o_usdt"] or to_token not in ["usdc", "velo", "eth", "o_usdt"]):
+        raise ValueError("Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain.")
+
+    if chain_id == "130" and (from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]):
+        raise ValueError("Only 'o_usdt' and 'usdc' are supported on Unichain.")
+
+    if chain_id == "1135" and (from_token not in ["o_usdt", "lsk", "eth", "usdt"] or to_token not in ["o_usdt", "lsk", "eth", "usdt"]):
+        raise ValueError("Only 'o_usdt', 'lsk', 'eth', and 'usdt' are supported on List.")
+
+    if chain_id == "8453" and (from_token not in ["usdc", "aero", "eth"] or to_token not in ["usdc", "aero", "eth"]):
+        raise ValueError("Only 'usdc', 'aero', and 'eth' are supported on BaseChain.")
 
     with get_chain(chain_id) as chain:
+        from_token = getattr(chain, from_token, None)
+        to_token = getattr(chain, to_token, None)
+        if from_token is None or to_token is None:
+            raise ValueError("Invalid token specified.")
+
         quote = chain.get_quote(from_token, to_token, amount)
         return json.dumps(asdict(quote))
 
 
 @mcp.tool()
 async def swap(
-    from_token: Literal["usdc", "velo", "eth"],
-    to_token: Literal["usdc", "velo", "eth"],
-    amount: float,
+    from_token: str,
+    to_token: str,
+    amount: int,
     slippage: Optional[float] = None,
     chain_id: str = "10",
 ):
@@ -301,21 +314,34 @@ async def swap(
     Execute a token swap transaction.
 
     Args:
-        from_token (Token): The token being sold.
-        to_token (Token): The token being bought.
-        amount (float): The amount of `from_token` to swap.
+        from_token (str): The token being sold. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
+        to_token (str): The token being bought. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
+        amount (int): The amount of `from_token` to swap.
         slippage (float, optional): Maximum acceptable slippage (default uses config value).
         chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         TransactionReceipt: The transaction receipt from the swap execution.
     """
-    from_token = getattr(OPChain, from_token, None)
-    to_token = getattr(OPChain, to_token, None)
-    if from_token is None or to_token is None:
-        raise ValueError("Invalid token specified. Use 'usdc', 'velo', or 'eth'.")
 
+    if chain_id == "10" and (from_token not in ["usdc", "velo", "eth", "o_usdt"] or to_token not in ["usdc", "velo", "eth", "o_usdt"]):
+        raise ValueError("Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain.")
+
+    if chain_id == "130" and (from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]):
+        raise ValueError("Only 'o_usdt' and 'usdc' are supported on Unichain.")
+
+    if chain_id == "1135" and (from_token not in ["o_usdt", "lsk", "eth", "usdt"] or to_token not in ["o_usdt", "lsk", "eth", "usdt"]):
+        raise ValueError("Only 'o_usdt', 'lsk', 'eth', and 'usdt' are supported on List.")
+
+    if chain_id == "8453" and (from_token not in ["usdc", "aero", "eth"] or to_token not in ["usdc", "aero", "eth"]):
+        raise ValueError("Only 'usdc', 'aero', and 'eth' are supported on BaseChain.")
+    
     with get_chain(chain_id) as chain:
+        from_token = getattr(chain, from_token, None)
+        to_token = getattr(chain, to_token, None)
+        if from_token is None or to_token is None:
+            raise ValueError("Invalid token specified. Use 'usdc', 'velo', or 'eth'.")
+
         tx_hash = chain.swap(from_token, to_token, amount, slippage)
         return tx_hash
 
@@ -326,7 +352,7 @@ def main():
             "Environment variable SUGAR_PK is not set. Please set it to your private key."
         )
     print("Starting Sugar MCP server...")
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")
 
 
 if __name__ == "__main__":
