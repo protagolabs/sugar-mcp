@@ -117,7 +117,7 @@ async def get_prices(
                 tokens,
             )
         )
-        
+
         append_stable = False
         append_native = False
 
@@ -326,7 +326,7 @@ def main():
             "Environment variable SUGAR_PK is not set. Please set it to your private key."
         )
     print("Starting Sugar MCP server...")
-    mcp.run(transport="sse")
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":
