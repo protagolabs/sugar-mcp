@@ -13,23 +13,28 @@ mcp = FastMCP("sugar-mcp")
 
 
 @mcp.tool()
-async def get_all_tokens(
-    limit: int, offset: int, listed_only: bool = False, chain_id: str = "10"
-):
+async def get_all_tokens(limit: int, offset: int, chain_id: str = "10"):
     """
     Retrieve all tokens supported by the protocol.
 
     Args:
         limit (int): Maximum number of tokens to return.
         offset (int): The starting point to retrieve tokens.
-        listed_only (bool): If True, only return tokens that are marked as 'listed'.
         chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[Token]: A list of Token objects.
     """
     with get_chain(chain_id) as chain:
-        tokens = chain.get_tokens_page(limit, offset, listed_only)
+        tokens = chain.get_tokens_page(limit, offset)
+        tokens = list(
+            map(
+                lambda t: Token.from_tuple(
+                    t, chain_id=chain.chain_id, chain_name=chain.name
+                ),
+                tokens,
+            )
+        )
         return json.dumps([asdict(t) for t in tokens])
 
 
@@ -55,14 +60,13 @@ async def get_token_prices(token_address: str, chain_id: str = "10"):
             append_stable = True
 
         if chain.settings.native_token_symbol.lower() != token_address.lower():
-            native_token = chain.get_token(chain.settings.wrapped_native_token_addr)
             tokens.append(
                 Token.make_native_token(
                     chain.settings.native_token_symbol,
-                    native_token.token_address,
-                    native_token.decimals,
-                    native_token.chain_id,
-                    native_token.chain_name,
+                    chain.settings.wrapped_native_token_addr,
+                    chain.settings.native_token_decimals,
+                    chain_id=chain.chain_id,
+                    chain_name=chain.name,
                 )
             )
             append_native = True
@@ -104,8 +108,16 @@ async def get_prices(
         List[Price]: A list of Price objects with token-price mappings.
     """
     with get_chain(chain_id) as chain:
-        tokens = chain.get_tokens_page(limit, offset, listed_only)
-
+        tokens = chain.get_tokens_page(limit, offset)
+        tokens = list(
+            map(
+                lambda t: Token.from_tuple(
+                    t, chain_id=chain.chain_id, chain_name=chain.name
+                ),
+                tokens,
+            )
+        )
+        
         append_stable = False
         append_native = False
 
@@ -116,14 +128,13 @@ async def get_prices(
             append_stable = True
 
         if chain.settings.native_token_symbol.lower() not in token_address_list:
-            native_token = chain.get_token(chain.settings.wrapped_native_token_addr)
             tokens.append(
                 Token.make_native_token(
                     chain.settings.native_token_symbol,
-                    native_token.token_address,
-                    native_token.decimals,
-                    native_token.chain_id,
-                    native_token.chain_name,
+                    chain.settings.wrapped_native_token_addr,
+                    chain.settings.native_token_decimals,
+                    chain_id=chain.chain_id,
+                    chain_name=chain.name,
                 )
             )
             append_native = True
@@ -150,7 +161,7 @@ async def get_prices(
 
 
 @mcp.tool()
-async def get_raw_pools(limit: int, offset: int, chain_id: str = "10"):
+async def get_pools(limit: int, offset: int, chain_id: str = "10"):
     """
     Retrieve all raw liquidity pools.
 
@@ -163,12 +174,12 @@ async def get_raw_pools(limit: int, offset: int, chain_id: str = "10"):
         List[LiquidityPool] or List[LiquidityPoolForSwap]: A list of pool objects.
     """
     with get_chain(chain_id) as chain:
-        pools = chain.get_raw_pools_page(limit, offset)
-        return json.dumps(pools)
+        pools = chain.get_pools_page(limit, offset)
+        return json.dumps([asdict(p) for p in pools])
 
 
 @mcp.tool()
-async def get_raw_pool_by_address(address: str, chain_id: str = "10"):
+async def get_pool_by_address(address: str, chain_id: str = "10"):
     """
     Retrieve a raw liquidity pool by its contract address.
 
@@ -181,32 +192,36 @@ async def get_raw_pool_by_address(address: str, chain_id: str = "10"):
     """
     with get_chain(chain_id) as chain:
         try:
-            pool = chain.get_raw_pool_by_address(address)
+            pool = chain.get_pool_by_address(address)
         except Exception as e:
             return json.dumps({"error": str(e)})
         if pool is None:
             return json.dumps(None)
-        return json.dumps(pool)
+        return json.dumps(asdict(pool))
 
 
 @mcp.tool()
-async def get_raw_pools_for_swaps(chain_id: str = "10"):
+async def get_pools_for_swaps(limit: int, offset: int, chain_id: str = "10"):
     """
     Retrieve all raw liquidity pools suitable for swaps.
 
     Args:
+        limit (int): The maximum number of pools to retrieve.
+        offset (int): The starting point for pagination.
         chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[LiquidityPoolForSwap]: A list of simplified pool objects for swaps.
     """
     with get_chain(chain_id) as chain:
-        pools = chain.get_raw_pools(for_swaps=True)
-        return json.dumps(pools)
+        pools = chain.get_pools_page(limit, offset, for_swaps=True)
+        return json.dumps([asdict(p) for p in pools])
 
 
 @mcp.tool()
-async def get_raw_latest_pool_epochs(offset: int, limit: int = 10, chain_id: str = "10"):
+async def get_latest_pool_epochs(
+    offset: int, limit: int = 10, chain_id: str = "10"
+):
     """
     Retrieve the latest epoch data for all pools.
 
@@ -219,12 +234,12 @@ async def get_raw_latest_pool_epochs(offset: int, limit: int = 10, chain_id: str
         List[LiquidityPoolEpoch]: A list of the most recent epochs across all pools.
     """
     with get_chain(chain_id) as chain:
-        epochs = chain.get_raw_latest_pool_epochs_page(limit, offset)
-        return json.dumps(epochs)
+        epochs = chain.get_latest_pool_epochs_page(limit, offset)
+        return json.dumps([asdict(p) for p in epochs])
 
 
 @mcp.tool()
-async def get_raw_pool_epochs(
+async def get_pool_epochs(
     lp: str, offset: int = 0, limit: int = 10, chain_id: str = "10"
 ):
     """
@@ -240,8 +255,8 @@ async def get_raw_pool_epochs(
         List[LiquidityPoolEpoch]: A list of epoch entries for the specified pool.
     """
     with get_chain(chain_id) as chain:
-        epochs = chain.get_raw_pool_epochs(lp, offset, limit)
-        return json.dumps(epochs)
+        epochs = chain.get_pool_epochs_page(lp, offset, limit)
+        return json.dumps([asdict(p) for p in epochs])
 
 
 @mcp.tool()
@@ -311,7 +326,7 @@ def main():
             "Environment variable SUGAR_PK is not set. Please set it to your private key."
         )
     print("Starting Sugar MCP server...")
-    mcp.run(transport="stdio")
+    mcp.run(transport="sse")
 
 
 if __name__ == "__main__":
