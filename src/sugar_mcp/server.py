@@ -1,19 +1,179 @@
-import json
 import os
 
 from mcp.server.fastmcp import FastMCP
-from netmind_sugar.chains import get_chain, OPChain, Token
-from sugar_mcp.models import asdict
+from netmind_sugar.chains import get_chain, Token, Price, LiquidityPool, Quote, LiquidityPoolForSwap
+from netmind_sugar.pool import Amount, LiquidityPoolEpoch
+from pydantic import Field, BaseModel
 
-from typing import Literal, Optional
-from functools import lru_cache
+from typing import Optional, List, Tuple
 
 
 mcp = FastMCP("sugar-mcp")
 
 
+class TokenInfo(BaseModel):
+    chain_id: str = Field(..., description="Chain ID, e.g., '10' for OPChain, '8453' for BaseChain")
+    chain_name: str = Field(..., description="Chain name, e.g., 'OPChain', 'BaseChain'")
+    token_address: str = Field(..., description="Token contract address")
+    symbol: str = Field(..., description="Token symbol, e.g., 'USDC', 'VELO'")
+    decimals: int = Field(..., description="Number of decimals for the token")
+    listed: bool = Field(..., description="Whether the token is listed")
+    wrapped_token_address: str = Field(default="", description="Wrapped token address")
+
+    @staticmethod
+    def from_token(t: Token):
+        return TokenInfo(
+            chain_id=t.chain_id,
+            chain_name=t.chain_name,
+            token_address=t.token_address,
+            symbol=t.symbol,
+            decimals=t.decimals,
+            listed=t.listed,
+            wrapped_token_address=t.wrapped_token_address if t.wrapped_token_address else "",
+        )
+
+class PriceInfo(BaseModel):
+    token: TokenInfo = Field(..., description="Token information")
+    price: float = Field(..., description="Price in stable token")
+
+    @staticmethod
+    def from_price(p: Price):
+        token_info = TokenInfo.from_token(p.token)
+        return PriceInfo(token=token_info, price=p.price)
+
+class AmountInfo(BaseModel):
+    token: TokenInfo = Field(..., description="Token information")
+    amount: int = Field(..., description="Amount in wei")
+    price: PriceInfo = Field(..., description="Price information")
+
+    @staticmethod
+    def from_amount(a: Amount):
+        price_info = PriceInfo.from_price(a.price)
+        return AmountInfo(token=TokenInfo.from_token(a.token), amount=a.amount, price=price_info)
+
+class LiquidityPoolInfo(BaseModel):
+    chain_id: str = Field(..., description="Chain ID")
+    chain_name: str = Field(..., description="Chain name")
+    lp: str = Field(..., description="Liquidity pool address")
+    factory: str = Field(..., description="Factory address")
+    symbol: str = Field(..., description="Token symbol")
+    type: int = Field(..., description="Pool type")
+    is_stable: bool = Field(..., description="Whether the pool is stable")
+    is_cl: bool = Field(..., description="Whether the pool is concentrated liquidity")
+    total_supply: float = Field(..., description="Total supply of the pool")
+    decimals: int = Field(..., description="Number of decimals for the pool")
+    token0: TokenInfo = Field(..., description="Token0 information")
+    reserve0: AmountInfo = Field(..., description="Token0 reserve amount")
+    token1: TokenInfo = Field(..., description="Token1 information")
+    reserve1: AmountInfo = Field(..., description="Token1 reserve amount")
+    token0_fees: AmountInfo = Field(..., description="Token0 fees")
+    token1_fees: AmountInfo = Field(..., description="Token1 fees")
+    pool_fee: float = Field(..., description="Pool fee")
+    gauge_total_supply: float = Field(..., description="Gauge total supply")
+    emissions: Optional[AmountInfo] = Field(..., description="Emissions information")
+    emissions_token: Optional[TokenInfo] = Field(..., description="Emissions token information")
+    weekly_emissions: Optional[AmountInfo] = Field(..., description="Weekly emissions information")
+    nfpm: str = Field(..., description="NFPM information")
+    alm: str = Field(..., description="ALM information")
+
+    @staticmethod
+    def from_pool(p: LiquidityPool):
+        return LiquidityPoolInfo(
+            chain_id=p.chain_id,
+            chain_name=p.chain_name,
+            lp=p.lp,
+            factory=p.factory,
+            symbol=p.symbol,
+            type=p.type,
+            is_stable=p.is_stable,
+            is_cl=p.is_cl,
+            total_supply=p.total_supply,
+            decimals=p.decimals,
+            token0=TokenInfo.from_token(p.token0),
+            reserve0=AmountInfo.from_amount(p.reserve0) if p.reserve0 else None,
+            token1=TokenInfo.from_token(p.token1),
+            reserve1=AmountInfo.from_amount(p.reserve1) if p.reserve1 else None,
+            token0_fees=AmountInfo.from_amount(p.token0_fees) if p.token0_fees else None,
+            token1_fees=AmountInfo.from_amount(p.token1_fees) if p.token1_fees else None,
+            pool_fee=p.pool_fee,
+            gauge_total_supply=p.gauge_total_supply,
+            emissions=AmountInfo.from_amount(p.emissions) if p.emissions else None,
+            emissions_token=TokenInfo.from_token(p.emissions_token) if p.emissions_token else None,
+            weekly_emissions=AmountInfo.from_amount(p.weekly_emissions) if p.weekly_emissions else None,
+            nfpm=p.nfpm,
+            alm=p.alm
+        )
+
+class LiquidityPoolForSwapInfo(BaseModel):
+    chain_id: str = Field(..., description="Chain ID")
+    chain_name: str = Field(..., description="Chain name")
+    lp: str = Field(..., description="Liquidity pool address")
+    type: int = Field(..., description="Pool type")
+    token0_address: str = Field(..., description="Token0 address")
+    token1_address: str = Field(..., description="Token1 address")
+
+    @staticmethod
+    def from_pool(p: LiquidityPoolForSwap):
+        return LiquidityPoolForSwapInfo(
+            chain_id=p.chain_id,
+            chain_name=p.chain_name,
+            lp=p.lp,
+            type=p.type,
+            token0_address=p.token0_address,
+            token1_address=p.token1_address
+        )
+
+class LiquidityPoolEpochInfo(BaseModel):
+    ts: int = Field(..., description="Timestamp of the epoch")
+    lp: str = Field(..., description="Liquidity pool address")
+    pool: LiquidityPoolInfo = Field(..., description="Liquidity pool information")
+    votes: int = Field(..., description="Number of votes")
+    emissions: int = Field(..., description="Emissions amount")
+    incentives: List[AmountInfo] = Field(..., description="List of incentives amounts")
+    fees: List[AmountInfo] = Field(..., description="List of fees amounts")
+
+    @staticmethod
+    def from_epoch(e: LiquidityPoolEpoch):
+        return LiquidityPoolEpochInfo(
+            ts=e.ts,
+            lp=e.lp,
+            pool=LiquidityPoolInfo.from_pool(e.pool),
+            votes=e.votes,
+            emissions=e.emissions,
+            incentives=[AmountInfo.from_amount(i) for i in e.incentives],
+            fees=[AmountInfo.from_amount(f) for f in e.fees]
+        )
+
+class QuoteInputInfo(BaseModel):
+    from_token: TokenInfo = Field(..., description="From token information")
+    to_token: TokenInfo = Field(..., description="To token information")
+    path: List[Tuple[LiquidityPoolForSwapInfo, bool]] = Field(..., description="Swap path as list of (pool, reversed) tuples")
+    amount_in: int = Field(..., description="Input amount in wei")
+
+    @staticmethod
+    def from_quote_input(q: Quote):
+        return QuoteInputInfo(
+            from_token=TokenInfo.from_token(q.input.from_token),
+            to_token=TokenInfo.from_token(q.input.to_token),
+            path=[(LiquidityPoolForSwapInfo.from_pool(p), rev) for p, rev in q.input.path],
+            amount_in=q.input.amount_in
+        )
+
+class QuoteInfo(BaseModel):
+    input: QuoteInputInfo = Field(..., description="Quote input information")
+    amount_out: int = Field(..., description="Output amount in wei")
+
+    @staticmethod
+    def from_quote(q: Quote):
+        return QuoteInfo(
+            input=QuoteInputInfo.from_quote_input(q),
+            amount_out=q.amount_out
+        )
+
 @mcp.tool()
-async def get_all_tokens(limit: int, offset: int, chain_id: str = "10"):
+async def get_all_tokens(
+    limit: int, offset: int, chain_id: str = "10"
+) -> List[TokenInfo]:
     """
     Retrieve all tokens supported by the protocol.
 
@@ -29,17 +189,18 @@ async def get_all_tokens(limit: int, offset: int, chain_id: str = "10"):
         tokens = chain.get_tokens_page(limit, offset)
         tokens = list(
             map(
-                lambda t: Token.from_tuple(
-                    t, chain_id=chain.chain_id, chain_name=chain.name
+                lambda t: TokenInfo.from_token(
+                    Token.from_tuple(t, chain_id=chain.chain_id, chain_name=chain.name)
                 ),
                 tokens,
             )
         )
-        return json.dumps([asdict(t) for t in tokens])
+
+        return tokens
 
 
 @mcp.tool()
-async def get_token_prices(token_address: str, chain_id: str = "10"):
+async def get_token_prices(token_address: str, chain_id: str = "10") -> List[PriceInfo]:
     """
     Retrieve prices for a specific token in terms of the stable token.
 
@@ -72,6 +233,7 @@ async def get_token_prices(token_address: str, chain_id: str = "10"):
             append_native = True
 
         prices = chain.get_prices(tokens)
+        prices = [PriceInfo.from_price(p) for p in prices]
         if append_stable:
             # 如果在获取价格的时候加上了稳定币，在返回结果的时候再从列表里去掉，否则外部应用在传offset的时候会有问题
             prices = [
@@ -88,13 +250,13 @@ async def get_token_prices(token_address: str, chain_id: str = "10"):
                 if p.token.token_address.lower()
                 != chain.settings.native_token_symbol.lower()
             ]
-        return json.dumps([asdict(p) for p in prices])
+        return prices
 
 
 @mcp.tool()
 async def get_prices(
     limit: int, offset: int, listed_only: bool = False, chain_id: str = "10"
-):
+) -> List[PriceInfo]:
     """
     Retrieve prices for a list of tokens in terms of the stable token.
 
@@ -140,6 +302,7 @@ async def get_prices(
             append_native = True
 
         prices = chain.get_prices(tokens)
+        prices = [PriceInfo.from_price(p) for p in prices]
         if append_stable:
             # 如果在获取价格的时候加上了稳定币，在返回结果的时候再从列表里去掉，否则外部应用在传offset的时候会有问题
             prices = [
@@ -157,11 +320,11 @@ async def get_prices(
                 != chain.settings.native_token_symbol.lower()
             ]
 
-        return json.dumps([asdict(t) for t in prices])
+        return prices
 
 
 @mcp.tool()
-async def get_pools(limit: int, offset: int, chain_id: str = "10"):
+async def get_pools(limit: int, offset: int, chain_id: str = "10") -> List[LiquidityPoolInfo]:
     """
     Retrieve all raw liquidity pools.
 
@@ -175,11 +338,11 @@ async def get_pools(limit: int, offset: int, chain_id: str = "10"):
     """
     with get_chain(chain_id) as chain:
         pools = chain.get_pools_page(limit, offset)
-        return json.dumps([asdict(p) for p in pools])
+        return [LiquidityPoolInfo.from_pool(p) for p in pools]
 
 
 @mcp.tool()
-async def get_pool_by_address(address: str, chain_id: str = "10"):
+async def get_pool_by_address(address: str, chain_id: str = "10") -> LiquidityPoolInfo | None:
     """
     Retrieve a raw liquidity pool by its contract address.
 
@@ -191,17 +354,12 @@ async def get_pool_by_address(address: str, chain_id: str = "10"):
         Optional[LiquidityPool]: The matching LiquidityPool object, or None if not found.
     """
     with get_chain(chain_id) as chain:
-        try:
-            pool = chain.get_pool_by_address(address)
-        except Exception as e:
-            return json.dumps({"error": str(e)})
-        if pool is None:
-            return json.dumps(None)
-        return json.dumps(asdict(pool))
+        pool = chain.get_pool_by_address(address)
+        return LiquidityPoolInfo.from_pool(pool)
 
 
 @mcp.tool()
-async def get_pools_for_swaps(limit: int, offset: int, chain_id: str = "10"):
+async def get_pools_for_swaps(limit: int, offset: int, chain_id: str = "10") -> List[LiquidityPoolForSwapInfo]:
     """
     Retrieve all raw liquidity pools suitable for swaps.
 
@@ -215,13 +373,11 @@ async def get_pools_for_swaps(limit: int, offset: int, chain_id: str = "10"):
     """
     with get_chain(chain_id) as chain:
         pools = chain.get_pools_page(limit, offset, for_swaps=True)
-        return json.dumps([asdict(p) for p in pools])
+        return [LiquidityPoolForSwapInfo.from_pool(p) for p in pools]
 
 
 @mcp.tool()
-async def get_latest_pool_epochs(
-    offset: int, limit: int = 10, chain_id: str = "10"
-):
+async def get_latest_pool_epochs(offset: int, limit: int = 10, chain_id: str = "10") -> List[LiquidityPoolEpochInfo]:
     """
     Retrieve the latest epoch data for all pools.
 
@@ -235,13 +391,13 @@ async def get_latest_pool_epochs(
     """
     with get_chain(chain_id) as chain:
         epochs = chain.get_latest_pool_epochs_page(limit, offset)
-        return json.dumps([asdict(p) for p in epochs])
+        return [LiquidityPoolEpochInfo.from_epoch(p) for p in epochs]
 
 
 @mcp.tool()
 async def get_pool_epochs(
     lp: str, offset: int = 0, limit: int = 10, chain_id: str = "10"
-):
+) -> List[LiquidityPoolEpochInfo]:
     """
     Retrieve historical epoch data for a given liquidity pool.
 
@@ -256,7 +412,7 @@ async def get_pool_epochs(
     """
     with get_chain(chain_id) as chain:
         epochs = chain.get_pool_epochs_page(lp, offset, limit)
-        return json.dumps([asdict(p) for p in epochs])
+        return [LiquidityPoolEpochInfo.from_epoch(p) for p in epochs]
 
 
 @mcp.tool()
@@ -265,7 +421,7 @@ async def get_quote(
     to_token: str,
     amount: int,
     chain_id: str = "10",
-):
+) -> Optional[QuoteInfo]:
     """
     Retrieve the best quote for swapping a given amount from one token to another.
 
@@ -279,7 +435,7 @@ async def get_quote(
     Returns:
         Optional[Quote]: The best available quote, or None if no valid quote was found.
     """
-    
+
     if chain_id == "10" and (from_token not in ["usdc", "velo", "eth", "o_usdt"] or to_token not in ["usdc", "velo", "eth", "o_usdt"]):
         raise ValueError("Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain.")
 
@@ -299,7 +455,7 @@ async def get_quote(
             raise ValueError("Invalid token specified.")
 
         quote = chain.get_quote(from_token, to_token, amount)
-        return json.dumps(asdict(quote))
+        return QuoteInfo.from_quote(quote) if quote else None
 
 
 @mcp.tool()
@@ -309,7 +465,7 @@ async def swap(
     amount: int,
     slippage: Optional[float] = None,
     chain_id: str = "10",
-):
+) -> str:
     """
     Execute a token swap transaction.
 
@@ -324,18 +480,33 @@ async def swap(
         TransactionReceipt: The transaction receipt from the swap execution.
     """
 
-    if chain_id == "10" and (from_token not in ["usdc", "velo", "eth", "o_usdt"] or to_token not in ["usdc", "velo", "eth", "o_usdt"]):
-        raise ValueError("Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain.")
+    if chain_id == "10" and (
+        from_token not in ["usdc", "velo", "eth", "o_usdt"]
+        or to_token not in ["usdc", "velo", "eth", "o_usdt"]
+    ):
+        raise ValueError(
+            "Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain."
+        )
 
-    if chain_id == "130" and (from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]):
+    if chain_id == "130" and (
+        from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]
+    ):
         raise ValueError("Only 'o_usdt' and 'usdc' are supported on Unichain.")
 
-    if chain_id == "1135" and (from_token not in ["o_usdt", "lsk", "eth", "usdt"] or to_token not in ["o_usdt", "lsk", "eth", "usdt"]):
-        raise ValueError("Only 'o_usdt', 'lsk', 'eth', and 'usdt' are supported on List.")
+    if chain_id == "1135" and (
+        from_token not in ["o_usdt", "lsk", "eth", "usdt"]
+        or to_token not in ["o_usdt", "lsk", "eth", "usdt"]
+    ):
+        raise ValueError(
+            "Only 'o_usdt', 'lsk', 'eth', and 'usdt' are supported on List."
+        )
 
-    if chain_id == "8453" and (from_token not in ["usdc", "aero", "eth"] or to_token not in ["usdc", "aero", "eth"]):
+    if chain_id == "8453" and (
+        from_token not in ["usdc", "aero", "eth"]
+        or to_token not in ["usdc", "aero", "eth"]
+    ):
         raise ValueError("Only 'usdc', 'aero', and 'eth' are supported on BaseChain.")
-    
+
     with get_chain(chain_id) as chain:
         from_token = getattr(chain, from_token, None)
         to_token = getattr(chain, to_token, None)
