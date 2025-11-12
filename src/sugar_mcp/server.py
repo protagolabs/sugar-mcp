@@ -172,7 +172,7 @@ class QuoteInfo(BaseModel):
 
 @mcp.tool()
 async def get_all_tokens(
-    limit: int, offset: int, chain_id: str = "10"
+    limit: int, offset: int, chainId: str = "10"
 ) -> List[TokenInfo]:
     """
     Retrieve all tokens supported by the protocol.
@@ -180,12 +180,12 @@ async def get_all_tokens(
     Args:
         limit (int): Maximum number of tokens to return.
         offset (int): The starting point to retrieve tokens.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[Token]: A list of Token objects.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         tokens = chain.get_tokens_page(limit, offset)
         tokens = list(
             map(
@@ -200,18 +200,18 @@ async def get_all_tokens(
 
 
 @mcp.tool()
-async def get_token_prices(token_address: str, chain_id: str = "10") -> List[PriceInfo]:
+async def get_token_prices(token_address: str, chainId: str = "10") -> List[PriceInfo]:
     """
     Retrieve prices for a specific token in terms of the stable token.
 
     Args:
         token_address (str): The address of the token to retrieve prices for.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[Price]: A list of Price objects with token-price mappings.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         append_stable = False
         append_native = False
 
@@ -255,7 +255,7 @@ async def get_token_prices(token_address: str, chain_id: str = "10") -> List[Pri
 
 @mcp.tool()
 async def get_prices(
-    limit: int, offset: int, listed_only: bool = False, chain_id: str = "10"
+    limit: int, offset: int, listed_only: bool = False, chainId: str = "10"
 ) -> List[PriceInfo]:
     """
     Retrieve prices for a list of tokens in terms of the stable token.
@@ -264,12 +264,12 @@ async def get_prices(
         limit (int): Maximum number of prices to return.
         offset (int): The starting point to retrieve prices.
         listed_only (bool): If True, only return prices for tokens that are marked as 'listed'.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[Price]: A list of Price objects with token-price mappings.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         tokens = chain.get_tokens_page(limit, offset)
         tokens = list(
             map(
@@ -324,79 +324,79 @@ async def get_prices(
 
 
 @mcp.tool()
-async def get_pools(limit: int, offset: int, chain_id: str = "10") -> List[LiquidityPoolInfo]:
+async def get_pools(limit: int = 30, offset: int = 0, chainId: str = "10") -> List[LiquidityPoolInfo]:
     """
     Retrieve all raw liquidity pools.
 
     Args:
         limit (int): The maximum number of pools to retrieve.
         offset (int): The starting point for pagination.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[LiquidityPool] or List[LiquidityPoolForSwap]: A list of pool objects.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         pools = chain.get_pools_page(limit, offset)
         return [LiquidityPoolInfo.from_pool(p) for p in pools]
 
 
 @mcp.tool()
-async def get_pool_by_address(address: str, chain_id: str = "10") -> LiquidityPoolInfo | None:
+async def get_pool_by_address(address: str, chainId: str = "10") -> LiquidityPoolInfo | None:
     """
     Retrieve a raw liquidity pool by its contract address.
 
     Args:
         address (str): The address of the liquidity pool contract.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         Optional[LiquidityPool]: The matching LiquidityPool object, or None if not found.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         pool = chain.get_pool_by_address(address)
         return LiquidityPoolInfo.from_pool(pool)
 
 
 @mcp.tool()
-async def get_pools_for_swaps(limit: int, offset: int, chain_id: str = "10") -> List[LiquidityPoolForSwapInfo]:
+async def get_pools_for_swaps(limit: int, offset: int, chainId: str = "10") -> List[LiquidityPoolForSwapInfo]:
     """
     Retrieve all raw liquidity pools suitable for swaps.
 
     Args:
         limit (int): The maximum number of pools to retrieve.
         offset (int): The starting point for pagination.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[LiquidityPoolForSwap]: A list of simplified pool objects for swaps.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         pools = chain.get_pools_page(limit, offset, for_swaps=True)
         return [LiquidityPoolForSwapInfo.from_pool(p) for p in pools]
 
 
 @mcp.tool()
-async def get_latest_pool_epochs(offset: int, limit: int = 10, chain_id: str = "10") -> List[LiquidityPoolEpochInfo]:
+async def get_latest_pool_epochs(offset: int, limit: int = 10, chainId: str = "10") -> List[LiquidityPoolEpochInfo]:
     """
     Retrieve the latest epoch data for all pools.
 
     Args:
         limit (int): The maximum number of epochs to retrieve.
         offset (int): The starting point for pagination.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[LiquidityPoolEpoch]: A list of the most recent epochs across all pools.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         epochs = chain.get_latest_pool_epochs_page(limit, offset)
         return [LiquidityPoolEpochInfo.from_epoch(p) for p in epochs]
 
 
 @mcp.tool()
 async def get_pool_epochs(
-    lp: str, offset: int = 0, limit: int = 10, chain_id: str = "10"
+    lp: str, offset: int = 0, limit: int = 10, chainId: str = "10"
 ) -> List[LiquidityPoolEpochInfo]:
     """
     Retrieve historical epoch data for a given liquidity pool.
@@ -405,12 +405,12 @@ async def get_pool_epochs(
         lp (str): Address of the liquidity pool.
         offset (int): Offset for pagination.
         limit (int): Number of epochs to retrieve.
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         List[LiquidityPoolEpoch]: A list of epoch entries for the specified pool.
     """
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         epochs = chain.get_pool_epochs_page(lp, offset, limit)
         return [LiquidityPoolEpochInfo.from_epoch(p) for p in epochs]
 
@@ -420,7 +420,7 @@ async def get_quote(
     from_token: str,
     to_token: str,
     amount: int,
-    chain_id: str = "10",
+    chainId: str = "10",
 ) -> Optional[QuoteInfo]:
     """
     Retrieve the best quote for swapping a given amount from one token to another.
@@ -429,26 +429,26 @@ async def get_quote(
         from_token (str): The token to swap from. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
         to_token (str): The token to swap to. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
         amount (int): The amount to swap (in int, not uint256).
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
         filter_quotes (Callable[[Quote], bool], optional): Optional filter to apply on the quotes.
 
     Returns:
         Optional[Quote]: The best available quote, or None if no valid quote was found.
     """
 
-    if chain_id == "10" and (from_token not in ["usdc", "velo", "eth", "o_usdt"] or to_token not in ["usdc", "velo", "eth", "o_usdt"]):
+    if chainId == "10" and (from_token not in ["usdc", "velo", "eth", "o_usdt"] or to_token not in ["usdc", "velo", "eth", "o_usdt"]):
         raise ValueError("Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain.")
 
-    if chain_id == "130" and (from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]):
+    if chainId == "130" and (from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]):
         raise ValueError("Only 'o_usdt' and 'usdc' are supported on Unichain.")
 
-    if chain_id == "1135" and (from_token not in ["o_usdt", "lsk", "eth", "usdt"] or to_token not in ["o_usdt", "lsk", "eth", "usdt"]):
+    if chainId == "1135" and (from_token not in ["o_usdt", "lsk", "eth", "usdt"] or to_token not in ["o_usdt", "lsk", "eth", "usdt"]):
         raise ValueError("Only 'o_usdt', 'lsk', 'eth', and 'usdt' are supported on List.")
 
-    if chain_id == "8453" and (from_token not in ["usdc", "aero", "eth"] or to_token not in ["usdc", "aero", "eth"]):
+    if chainId == "8453" and (from_token not in ["usdc", "aero", "eth"] or to_token not in ["usdc", "aero", "eth"]):
         raise ValueError("Only 'usdc', 'aero', and 'eth' are supported on BaseChain.")
 
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         from_token = getattr(chain, from_token, None)
         to_token = getattr(chain, to_token, None)
         if from_token is None or to_token is None:
@@ -464,7 +464,7 @@ async def swap(
     to_token: str,
     amount: int,
     slippage: Optional[float] = None,
-    chain_id: str = "10",
+    chainId: str = "10",
 ) -> str:
     """
     Execute a token swap transaction.
@@ -474,13 +474,13 @@ async def swap(
         to_token (str): The token being bought. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
         amount (int): The amount of `from_token` to swap.
         slippage (float, optional): Maximum acceptable slippage (default uses config value).
-        chain_id (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         TransactionReceipt: The transaction receipt from the swap execution.
     """
 
-    if chain_id == "10" and (
+    if chainId == "10" and (
         from_token not in ["usdc", "velo", "eth", "o_usdt"]
         or to_token not in ["usdc", "velo", "eth", "o_usdt"]
     ):
@@ -488,12 +488,12 @@ async def swap(
             "Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain."
         )
 
-    if chain_id == "130" and (
+    if chainId == "130" and (
         from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]
     ):
         raise ValueError("Only 'o_usdt' and 'usdc' are supported on Unichain.")
 
-    if chain_id == "1135" and (
+    if chainId == "1135" and (
         from_token not in ["o_usdt", "lsk", "eth", "usdt"]
         or to_token not in ["o_usdt", "lsk", "eth", "usdt"]
     ):
@@ -501,13 +501,13 @@ async def swap(
             "Only 'o_usdt', 'lsk', 'eth', and 'usdt' are supported on List."
         )
 
-    if chain_id == "8453" and (
+    if chainId == "8453" and (
         from_token not in ["usdc", "aero", "eth"]
         or to_token not in ["usdc", "aero", "eth"]
     ):
         raise ValueError("Only 'usdc', 'aero', and 'eth' are supported on BaseChain.")
 
-    with get_chain(chain_id) as chain:
+    with get_chain(chainId) as chain:
         from_token = getattr(chain, from_token, None)
         to_token = getattr(chain, to_token, None)
         if from_token is None or to_token is None:
