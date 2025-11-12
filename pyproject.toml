@@ -1,6 +1,6 @@
 [project]
 name = "sugar-mcp"
-version = "0.3.14"
+version = "0.3.15"
 description = ""
 authors = [
     {name = "yanrujing", email = "rujing.yan@protagonist-ai.com"}

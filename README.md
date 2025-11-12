@@ -42,4 +42,27 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 }
 ```
 
+### Building and Publishing to PyPI
 
+To build and publish this package to PyPI:
+
+1. Install build dependencies:
+```bash
+pip install build twine
+```
+
+2. Build the package:
+```bash
+python -m build
+```
+
+3. Upload to PyPI:
+```bash
+twine upload dist/*
+```
+
+Or if using Poetry (as specified in pyproject.toml):
+```bash
+poetry build
+poetry publish
+```

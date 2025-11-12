@@ -4,6 +4,7 @@ from mcp.server.fastmcp import FastMCP
 from netmind_sugar.chains import get_chain, Token, Price, LiquidityPool, Quote, LiquidityPoolForSwap
 from netmind_sugar.pool import Amount, LiquidityPoolEpoch
 from pydantic import Field, BaseModel
+from web3 import Web3
 
 from typing import Optional, List, Tuple
 
@@ -211,6 +212,7 @@ async def get_token_prices(token_address: str, chainId: str = "10") -> List[Pric
     Returns:
         List[Price]: A list of Price objects with token-price mappings.
     """
+    token_address = Web3.to_checksum_address(token_address)
     with get_chain(chainId) as chain:
         append_stable = False
         append_native = False
@@ -353,6 +355,7 @@ async def get_pool_by_address(address: str, chainId: str = "10") -> LiquidityPoo
     Returns:
         Optional[LiquidityPool]: The matching LiquidityPool object, or None if not found.
     """
+    address = Web3.to_checksum_address(address)
     with get_chain(chainId) as chain:
         pool = chain.get_pool_by_address(address)
         return LiquidityPoolInfo.from_pool(pool)
@@ -410,6 +413,7 @@ async def get_pool_epochs(
     Returns:
         List[LiquidityPoolEpoch]: A list of epoch entries for the specified pool.
     """
+    lp = Web3.to_checksum_address(lp)
     with get_chain(chainId) as chain:
         epochs = chain.get_pool_epochs_page(lp, offset, limit)
         return [LiquidityPoolEpochInfo.from_epoch(p) for p in epochs]
