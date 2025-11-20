@@ -17,7 +17,7 @@ server = StdioServerParameters(
         #'http_proxy': 'http://127.0.0.1:1087',
         #'https_proxy': 'http://127.0.0.1:1087',
         'SUGAR_PK': 'xxx',
-        'SUGAR_RPC_URI_8453': 'https://lb.drpc.org/base/Ais_qY1vsEmZjQcXcYVk_Pejdy7njvQR8IwwzltYSRe_',
+        'SUGAR_RPC_URI_8453': 'https://lb.drpc.org/base/',
         'pools_count_upper_bound': '25000',   #扩展pools的数量上限，默认2500，默认值无法探测到CL_Pools
     }
 )
