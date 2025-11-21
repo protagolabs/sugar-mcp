@@ -46,18 +46,20 @@ class AmountInfo(BaseModel):
     token: TokenInfo = Field(..., description="Token information")
     amount: int = Field(..., description="Amount in wei")
     price: PriceInfo = Field(..., description="Price information")
+    #按产品需求添加字段
+    amount_in_stable: float = Field(..., description="Amount in stable token")
 
     @staticmethod
     def from_amount(a: Amount):
         price_info = PriceInfo.from_price(a.price)
-        return AmountInfo(token=TokenInfo.from_token(a.token), amount=a.amount, price=price_info)
+        return AmountInfo(token=TokenInfo.from_token(a.token), amount=a.amount, price=price_info, amount_in_stable=a.amount_in_stable)
 
 class LiquidityPoolInfo(BaseModel):
     chain_id: str = Field(..., description="Chain ID")
     chain_name: str = Field(..., description="Chain name")
     lp: str = Field(..., description="Liquidity pool address")
     factory: str = Field(..., description="Factory address")
-    symbol: str = Field(..., description="Token symbol")
+    symbol: str = Field(..., description="Pool symbol")
     type: int = Field(..., description="Pool type")
     is_stable: bool = Field(..., description="Whether the pool is stable")
     is_cl: bool = Field(..., description="Whether the pool is concentrated liquidity")
@@ -76,6 +78,19 @@ class LiquidityPoolInfo(BaseModel):
     weekly_emissions: Optional[AmountInfo] = Field(..., description="Weekly emissions information")
     nfpm: str = Field(..., description="NFPM information")
     alm: str = Field(..., description="ALM information")
+    #按产品需求追加字段
+    tvl: float = Field(..., description="Total value locked in stable token")
+    total_fees: float = Field(..., description="Total fees in stable token")
+    pool_fee_percentage: float = Field(..., description="Pool fee percentage")
+    volume_pct: float = Field(..., description="Volume percentage")
+    volume: float = Field(..., description="Volume in stable token")
+    token0_volume: float = Field(..., description="Token0 volume in stable token")
+    token1_volume: float = Field(..., description="Token1 volume in stable token")
+    gauge_staked_pct: float = Field(..., description="Gauge staked percentage")
+    apr: float = Field(..., description="Annual percentage rate")
+    
+
+
 
     @staticmethod
     def from_pool(p: LiquidityPool):
@@ -102,7 +117,17 @@ class LiquidityPoolInfo(BaseModel):
             emissions_token=TokenInfo.from_token(p.emissions_token) if p.emissions_token else None,
             weekly_emissions=AmountInfo.from_amount(p.weekly_emissions) if p.weekly_emissions else None,
             nfpm=p.nfpm,
-            alm=p.alm
+            alm=p.alm,
+            #追加字段赋值
+            tvl=p.tvl,
+            total_fees=p.total_fees,
+            pool_fee_percentage=p.pool_fee_percentage,
+            volume_pct=p.volume_pct,
+            volume=p.volume_pct * (p.token0_fees.amount_in_stable + p.token1_fees.amount_in_stable if p.token0_fees and p.token1_fees else 0),
+            token0_volume=p.token0_volume,
+            token1_volume=p.token1_volume,
+            gauge_staked_pct= (p.gauge_total_supply / p.total_supply * 100 if p.total_supply > 0 else 0),
+            apr=p.apr
         )
 
 class LiquidityPoolForSwapInfo(BaseModel):
@@ -341,6 +366,7 @@ async def get_pools(limit: int = 30, offset: int = 0, chainId: str = "10") -> Li
     with get_chain(chainId) as chain:
         pools = chain.get_pools_page(limit, offset)
         return [LiquidityPoolInfo.from_pool(p) for p in pools]
+    
 
 
 @mcp.tool()
@@ -520,6 +546,50 @@ async def swap(
         tx_hash = chain.swap(from_token, to_token, amount, slippage)
         return tx_hash
 
+@mcp.tool()
+async def get_pool_list(tokens: Optional[List[str]] = None, sort_by: str = "tvl", chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+    """
+    Retrieve liquidity pools based on token pair and order.
+
+    Args:
+        tokens (Optional[List[str]]): List of one or two token addresses to filter pools. If one token is provided, returns pools containing that token. If two tokens are provided, returns pools containing both tokens.
+        sort_by (str): The criteria to sort the pools by. Options are 'tvl', 'volume', or 'apr'.
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+
+    Returns:
+        list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
+    """
+    with get_chain(chainId) as chain:
+         
+        # 1. get all pools
+        pools = chain.get_pools()
+        if not pools:
+            return None
+            
+        # 2. filter by tokens
+        if tokens and len(tokens) == 1:
+            token_address = Web3.to_checksum_address(tokens[0])
+            pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
+        elif tokens and len(tokens) == 2:
+            token0_address = Web3.to_checksum_address(tokens[0])
+            token1_address = Web3.to_checksum_address(tokens[1])
+            pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
+        else:
+            raise ValueError("Only One or two tokens are supported for filtering.")
+            
+        
+        # 3. sort by given criteria
+        if sort_by == "tvl":
+            pools.sort(key=lambda p: p.tvl, reverse=True)
+        elif sort_by == "volume":
+            pools.sort(key=lambda p: p.volume.amount_in_stable if p.volume else 0, reverse=True)
+        elif sort_by == "apr":
+            pools.sort(key=lambda p: p.apr, reverse=True)
+        else:
+            raise ValueError("Unsupported sort_by criteria. Use 'tvl', 'volume', or 'apr'.")
+        
+        return [LiquidityPoolInfo.from_pool(p) for p in pools]
+        
 
 def main():
     if not os.environ.get("SUGAR_PK"):

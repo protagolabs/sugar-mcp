@@ -25,17 +25,6 @@ async def main():
             print(json.dumps(tools, indent=4, ensure_ascii=False))
 
             response = await session.call_tool(
-                'swap',
-                arguments={
-                    'from_token': 'velo',
-                    'to_token': 'eth',
-                    'amount': 10
-                }
-            )
-            epochs = json.loads(response.content[0].text)
-            print(len(epochs))
-
-            response = await session.call_tool(
                 'get_quote',
                 arguments={
                     'from_token': 'velo',
