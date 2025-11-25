@@ -546,39 +546,114 @@ async def swap(
         tx_hash = chain.swap(from_token, to_token, amount, slippage)
         return tx_hash
 
+    
 @mcp.tool()
-async def get_pool_list(tokens: Optional[List[str]] = None, sort_by: str = "tvl", chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+async def get_pools_by_token(token_address: str, limit: int = 30, offset: int = 0,  chainId: str = "10") -> list[LiquidityPoolInfo] | None:
     """
-    Retrieve liquidity pools based on token pair and order.
+    Retrieve liquidity pools that contain a specific token.
 
     Args:
-        tokens (Optional[List[str]]): List of one or two token addresses to filter pools. If one token is provided, returns pools containing that token. If two tokens are provided, returns pools containing both tokens.
-        sort_by (str): The criteria to sort the pools by. Options are 'tvl', 'volume', or 'apr'.
+        token_address (str): The address of the token to filter pools by.
+        limit (int): The maximum number of pools to retrieve.
+        offset (int): The starting point for pagination.
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+
+    Returns:
+        list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
+    """
+    token_address = Web3.to_checksum_address(token_address)
+    if not token_address:
+        raise ValueError("Token address must be provided.")
+    
+    
+    with get_chain(chainId) as chain:
+        # 1. get all pools
+        pools = chain.get_pools()
+        if not pools:
+            return None
+        
+        # 2. filter by specific token
+        pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
+        pools = pools[offset:offset+limit]
+        return [LiquidityPoolInfo.from_pool(p) for p in pools]
+    
+
+@mcp.tool()
+async def get_pools_by_pair(token0_address: str, token1_address: str, limit: int = 30, offset: int = 0, chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+    """
+    Retrieve liquidity pools that contain a specific token pair.
+
+    Args:
+        token0_address (str): The address of the first token in the pair.
+        token1_address (str): The address of the second token in the pair.
+        limit (int): The maximum number of pools to retrieve.
+        offset (int): The starting point for pagination.
+        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+
+    Returns:
+        list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
+    """
+    token0_address = Web3.to_checksum_address(token0_address)
+    token1_address = Web3.to_checksum_address(token1_address)
+    if not token0_address or not token1_address:
+        raise ValueError("Both token addresses must be provided.")
+    
+    with get_chain(chainId) as chain:
+        # 1. get all pools
+        pools = chain.get_pools()
+        if not pools:
+            return None
+        
+        # 2. filter by specific token pair
+        pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
+        pools = pools[offset:offset+limit]
+        return [LiquidityPoolInfo.from_pool(p) for p in pools]
+    
+
+@mcp.tool()
+async def get_pool_list(tokens: list[str] = None, pool_type: str = "all",  sort_by: str = "tvl", limit: int = 30, offset: int = 0, chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+    """
+    Retrieve liquidity pools based on specified criteria.
+
+    Args:
+        tokens (list[str] | None): List of token addresses to filter pools, Only One or two tokens are supported for filtering. If None, no token filtering is applied.
+        pool_type (str): The type of pools to retrieve ('v2', 'v3' or 'all').
+        sort_by (str): The criterion to sort the pools by ('tvl', 'volume', or 'apr').
+        limit (int): The maximum number of pools to retrieve.
+        offset (int): The starting point for pagination.
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
 
     Returns:
         list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
     """
     with get_chain(chainId) as chain:
-         
         # 1. get all pools
         pools = chain.get_pools()
         if not pools:
             return None
-            
-        # 2. filter by tokens
-        if tokens and len(tokens) == 1:
-            token_address = Web3.to_checksum_address(tokens[0])
-            pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
-        elif tokens and len(tokens) == 2:
-            token0_address = Web3.to_checksum_address(tokens[0])
-            token1_address = Web3.to_checksum_address(tokens[1])
-            pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
-        else:
-            raise ValueError("Only One or two tokens are supported for filtering.")
-            
         
-        # 3. sort by given criteria
+        # 2. filter by tokens
+        if tokens is not None:
+            if tokens and len(tokens) == 1:
+                token_address = Web3.to_checksum_address(tokens[0])
+                pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
+            elif tokens and len(tokens) == 2:
+                token0_address = Web3.to_checksum_address(tokens[0])
+                token1_address = Web3.to_checksum_address(tokens[1])
+                pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
+            else:   
+                raise ValueError("Only One or two tokens are supported for filtering.")
+
+        
+        # 3. filter by pool type
+        if pool_type not in ["v2", "v3", "all"]:
+            raise ValueError("Unsupported pool_type. Use 'v2', 'v3', or 'all'.")
+        if pool_type == "v2":
+            pools = [p for p in pools if not p.is_cl]
+        elif pool_type == "v3":
+            pools = [p for p in pools if p.is_cl]
+        
+        # 4. sort by given criteria
         if sort_by == "tvl":
             pools.sort(key=lambda p: p.tvl, reverse=True)
         elif sort_by == "volume":
@@ -588,8 +663,9 @@ async def get_pool_list(tokens: Optional[List[str]] = None, sort_by: str = "tvl"
         else:
             raise ValueError("Unsupported sort_by criteria. Use 'tvl', 'volume', or 'apr'.")
         
+        pools = pools[offset:offset+limit]
         return [LiquidityPoolInfo.from_pool(p) for p in pools]
-        
+ 
 
 def main():
     if not os.environ.get("SUGAR_PK"):
