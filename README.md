@@ -23,6 +23,9 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 - get_pool_epochs: Retrieve historical epoch data for a given liquidity pool.
 - get_quote: Retrieve the best quote for swapping a given amount from one token to another.
 - swap: Execute a token swap transaction.
+- get_pools_by_token: Retrieve liquidity pools that contain a specific token.
+- get_pools_by_pair: Retrieve liquidity pools that contain a specific token pair.
+- get_pool_list: Retrieve liquidity pools based on specified criteria.
 
 ### Usage
 ```json
