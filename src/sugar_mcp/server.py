@@ -626,6 +626,18 @@ async def get_pool_list(token_address_list: list[str] = None, pool_type: str = "
     Returns:
         list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
     """
+
+    @staticmethod
+    def safe_get_amount_in_stable(amount_obj, default=0.0):
+        # Helper function to safely extract amount_in_stable
+        if amount_obj is None:
+            return default
+        if isinstance(amount_obj, (int, float)):
+            return float(amount_obj)
+        if hasattr(amount_obj, 'amount_in_stable') and amount_obj.amount_in_stable is not None:
+            return amount_obj.amount_in_stable
+        return default
+    
     with get_chain(chainId) as chain:
         # 1. get all pools
         pools = chain.get_pools()
@@ -657,7 +669,8 @@ async def get_pool_list(token_address_list: list[str] = None, pool_type: str = "
         if sort_by == "tvl":
             pools.sort(key=lambda p: p.tvl, reverse=True)
         elif sort_by == "volume":
-            pools.sort(key=lambda p: p.volume.amount_in_stable if p.volume else 0, reverse=True)
+            # fix bug: some pools may have volume as Float or None
+            pools.sort(key=lambda p: safe_get_amount_in_stable(p.volume), reverse=True)
         elif sort_by == "apr":
             pools.sort(key=lambda p: p.apr, reverse=True)
         else:
