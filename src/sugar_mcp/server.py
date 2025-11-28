@@ -611,12 +611,12 @@ async def get_pools_by_pair(token0_address: str, token1_address: str, limit: int
     
 
 @mcp.tool()
-async def get_pool_list(tokens: list[str] = None, pool_type: str = "all",  sort_by: str = "tvl", limit: int = 30, offset: int = 0, chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+async def get_pool_list(token_address_list: list[str] = None, pool_type: str = "all",  sort_by: str = "tvl", limit: int = 30, offset: int = 0, chainId: str = "10") -> list[LiquidityPoolInfo] | None:
     """
     Retrieve liquidity pools based on specified criteria.
 
     Args:
-        tokens (list[str] | None): List of token addresses to filter pools, Only One or two tokens are supported for filtering. If None, no token filtering is applied.
+        token_address_list (list[str] | None): List of token addresses to filter pools, Only One or two tokens are supported for filtering. If None, no token filtering is applied.
         pool_type (str): The type of pools to retrieve ('v2', 'v3' or 'all').
         sort_by (str): The criterion to sort the pools by ('tvl', 'volume', or 'apr').
         limit (int): The maximum number of pools to retrieve.
@@ -632,14 +632,14 @@ async def get_pool_list(tokens: list[str] = None, pool_type: str = "all",  sort_
         if not pools:
             return None
         
-        # 2. filter by tokens
-        if tokens is not None:
-            if tokens and len(tokens) == 1:
-                token_address = Web3.to_checksum_address(tokens[0])
+        # 2. filter by token_address_list
+        if token_address_list is not None:
+            if token_address_list and len(token_address_list) == 1:
+                token_address = Web3.to_checksum_address(token_address_list[0])
                 pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
-            elif tokens and len(tokens) == 2:
-                token0_address = Web3.to_checksum_address(tokens[0])
-                token1_address = Web3.to_checksum_address(tokens[1])
+            elif token_address_list and len(token_address_list) == 2:
+                token0_address = Web3.to_checksum_address(token_address_list[0])
+                token1_address = Web3.to_checksum_address(token_address_list[1])
                 pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
             else:   
                 raise ValueError("Only One or two tokens are supported for filtering.")
