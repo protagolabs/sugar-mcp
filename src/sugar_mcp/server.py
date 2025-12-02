@@ -574,6 +574,7 @@ async def get_pools_by_token(token_address: str, limit: int = 30, offset: int = 
         
         # 2. filter by specific token
         pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
+        pools = sorted(pools, key=lambda p: p.tvl, reverse=True)
         pools = pools[offset:offset+limit]
         return [LiquidityPoolInfo.from_pool(p) for p in pools]
     
@@ -606,6 +607,7 @@ async def get_pools_by_pair(token0_address: str, token1_address: str, limit: int
         
         # 2. filter by specific token pair
         pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
+        pools = sorted(pools, key=lambda p: p.tvl, reverse=True)
         pools = pools[offset:offset+limit]
         return [LiquidityPoolInfo.from_pool(p) for p in pools]
     
