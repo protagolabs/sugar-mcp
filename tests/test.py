@@ -1,87 +1,80 @@
 import json
-
-from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.sse import sse_client
 from mcp import ClientSession
 import asyncio
 
-server = StdioServerParameters(
-    command='python',
-    args=['/Users/yanrujing/Desktop/workspace/code/Sugar-MCP/src/sugar_mcp/server.py'],
-    env={
-        'http_proxy': 'http://127.0.0.1:1087',
-        'https_proxy': 'http://127.0.0.1:1087',
-        'SUGAR_PK': 'xxx',
-        # 'SUGAR_RPC_URI_10': 'https://myrpc.com'
-    }
-)
 
+url = "http://127.0.0.1:8089/sse"
 
 async def main():
-    async with stdio_client(server) as (read, write):
+    async with sse_client(url) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            response = await session.list_tools()
-            tools = [dict(t) for t in response.tools]
-            print(json.dumps(tools, indent=4, ensure_ascii=False))
+            tools_to_call = [
+                      ('get_pool_list', 
+                            {
+                                'token_address_list': ['0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913','0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf'],
+                                'pool_type': 'all', 
+                                'sort_by': 'tvl', 
+                                'chainId': '8453'
+                            }
+                      ),
+                    # ('get_pools_by_token',
+                    #     {
+                    #         'token_address': '0x940181a94A35A4569E4529A3CDfB74e38FD98631',
+                    #         'limit': 5,
+                    #         'offset': 0,
+                    #         'chainId': '8453'
+                    #     }
+                    # ),
+                    # ('get_pools_by_pair',
+                    #     {
+                    #         'token0_address': '0x4200000000000000000000000000000000000006',
+                    #         'token1_address': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+                    #         'limit': 5,
+                    #         'offset': 0,
+                    #         'chainId': '8453'
+                    #     }
+                    # ),
+                   
+                               
+                ]
+            
+            for tool_name, args in tools_to_call:
+                print(f"\n🛠️ 正在调用工具: {tool_name}")
+                try:
+                    response = await session.call_tool(tool_name, arguments=args)
+                    # print("response:", response)
+                    
+                    print("✅ 调用成功!")
+                    for content in response.content:
+                        # print("Raw content:", content.text)
+                        print("--------------------------------")
+                        try:
+                            data = json.loads(content.text)
+                            print("LP Address:", data['lp'])
+                            print("LP type:", data['type'])
+                            print("is_stable:", data['is_stable'])
+                            print("is_cl:", data['is_cl'])
+                            print("LP token0:", data['token0']['symbol'], "address:", data['token0']['token_address'])
+                            print("LP token1:", data['token1']['symbol'], "address:", data['token1']['token_address'])
+                            print("TVL:", data['tvl'])
+                            print("APR:", data['apr'])
+                            print("volume:", data['volume'])
+                            print("fee:", data['pool_fee'])
+                            print("total fees:", data['total_fees'])
 
-            response = await session.call_tool(
-                'get_quote',
-                arguments={
-                    'from_token': 'velo',
-                    'to_token': 'eth',
-                    'amount': 10
-                }
-            )
-            epochs = json.loads(response.content[0].text)
-            print(len(epochs))
+                        except json.JSONDecodeError:
+                            print("Non-JSON response:", content.text)
+               
 
-            response = await session.call_tool(
-                'get_pool_by_address',
-                arguments={
-                    'address': '0x904f14F9ED81d0b0a40D8169B28592aac5687158'
-                }
-            )
-            epochs = json.loads(response.content[0].text)
-            print(len(epochs))
+                    print(f"📊 结果数量: {len(response.content)}")
+                    
+                except Exception as e:
+                    print(f"❌ 调用工具 {tool_name} 失败: {e}")
+                    print(f"详细错误信息: {traceback.format_exc()}")
+                    continue
 
-            response = await session.call_tool(
-                'get_pools_for_swaps',
-            )
-            epochs = json.loads(response.content[0].text)
-            print(len(epochs))
-
-            response = await session.call_tool(
-                'get_pool_epochs',
-                arguments={
-                    'lp': '0x7A7f1187c4710010DB17d0a9ad3fcE85e6ecD90a'
-                }
-            )
-            epochs = json.loads(response.content[0].text)
-            print(len(epochs))
-
-            response = await session.call_tool(
-                'get_latest_pool_epochs'
-            )
-            epochs = json.loads(response.content[0].text)
-            print(len(epochs))
-
-            response = await session.call_tool(
-                'get_pools'
-            )
-            pools = json.loads(response.content[0].text)
-            print(len(pools))
-
-            response = await session.call_tool(
-                "get_all_tokens",
-            )
-            tokens = json.loads(response.content[0].text)
-            print(len(tokens))
-
-            response = await session.call_tool(
-                "get_prices",
-            )
-            prices = json.loads(response.content[0].text)
-            print(len(prices))
 
 
 if __name__ == "__main__":

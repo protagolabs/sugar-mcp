@@ -1,4 +1,5 @@
 import os
+import time
 
 from mcp.server.fastmcp import FastMCP
 from netmind_sugar.chains import get_chain, Token, Price, LiquidityPool, Quote, LiquidityPoolForSwap
@@ -7,9 +8,12 @@ from pydantic import Field, BaseModel
 from web3 import Web3
 
 from typing import Optional, List, Tuple
+from sugar_mcp.cache import _get_cached_pools, _get_pool_from_cache, _get_pools_from_chain, _get_pool_from_chain, start_background_updates, set_enabled_chains, set_pool_filtering, set_cache_duration_minutes, configure_cache, CacheConfig, start_cache_system
 
 
-mcp = FastMCP("sugar-mcp")
+mcp = FastMCP("sugar-mcp", port=8089)
+
+
 
 
 class TokenInfo(BaseModel):
@@ -351,7 +355,7 @@ async def get_prices(
 
 
 @mcp.tool()
-async def get_pools(limit: int = 30, offset: int = 0, chainId: str = "10") -> List[LiquidityPoolInfo]:
+async def get_pools(limit: int = 30, offset: int = 0, chainId: str = "10", use_cache: bool = True) -> List[LiquidityPoolInfo]:
     """
     Retrieve all raw liquidity pools.
 
@@ -359,36 +363,38 @@ async def get_pools(limit: int = 30, offset: int = 0, chainId: str = "10") -> Li
         limit (int): The maximum number of pools to retrieve.
         offset (int): The starting point for pagination.
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        use_cache (bool): Whether to use cached data. Defaults to True.
 
     Returns:
         List[LiquidityPool] or List[LiquidityPoolForSwap]: A list of pool objects.
     """
-    with get_chain(chainId) as chain:
-        pools = chain.get_pools_page(limit, offset)
-        return [LiquidityPoolInfo.from_pool(p) for p in pools]
+    pools = _get_cached_pools(chainId) if use_cache else _get_pools_from_chain(chainId)
+    # Apply pagination to cached data
+    paginated_pools = pools[offset:offset + limit]
+    return [LiquidityPoolInfo.from_pool(p) for p in paginated_pools]
     
 
 
 @mcp.tool()
-async def get_pool_by_address(address: str, chainId: str = "10") -> LiquidityPoolInfo | None:
+async def get_pool_by_address(address: str, chainId: str = "10", use_cache: bool = True) -> LiquidityPoolInfo | None:
     """
     Retrieve a raw liquidity pool by its contract address.
 
     Args:
         address (str): The address of the liquidity pool contract.
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        use_cache (bool): Whether to use cached data. Defaults to True.
 
     Returns:
         Optional[LiquidityPool]: The matching LiquidityPool object, or None if not found.
     """
     address = Web3.to_checksum_address(address)
-    with get_chain(chainId) as chain:
-        pool = chain.get_pool_by_address(address)
-        return LiquidityPoolInfo.from_pool(pool)
+    pool = _get_pool_from_cache(chainId, address) if use_cache else _get_pool_from_chain(chainId, address)
+    return LiquidityPoolInfo.from_pool(pool) if pool else None
 
 
 @mcp.tool()
-async def get_pools_for_swaps(limit: int, offset: int, chainId: str = "10") -> List[LiquidityPoolForSwapInfo]:
+async def get_pools_for_swaps(limit: int, offset: int, chainId: str = "10", use_cache: bool = True) -> List[LiquidityPoolForSwapInfo]:
     """
     Retrieve all raw liquidity pools suitable for swaps.
 
@@ -396,13 +402,16 @@ async def get_pools_for_swaps(limit: int, offset: int, chainId: str = "10") -> L
         limit (int): The maximum number of pools to retrieve.
         offset (int): The starting point for pagination.
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        use_cache (bool): Whether to use cached data. Defaults to True.
 
     Returns:
         List[LiquidityPoolForSwap]: A list of simplified pool objects for swaps.
     """
-    with get_chain(chainId) as chain:
-        pools = chain.get_pools_page(limit, offset, for_swaps=True)
-        return [LiquidityPoolForSwapInfo.from_pool(p) for p in pools]
+    pools = _get_cached_pools(chainId) if use_cache else _get_pools_from_chain(chainId)
+    # Filter pools suitable for swaps (assuming all cached pools can be used for swaps)
+    # Apply pagination
+    paginated_pools = pools[offset:offset + limit]
+    return [LiquidityPoolForSwapInfo.from_pool(p) for p in paginated_pools]
 
 
 @mcp.tool()
@@ -548,7 +557,7 @@ async def swap(
 
     
 @mcp.tool()
-async def get_pools_by_token(token_address: str, limit: int = 30, offset: int = 0,  chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+async def get_pools_by_token(token_address: str, limit: int = 30, offset: int = 0,  chainId: str = "10", use_cache: bool = True) -> list[LiquidityPoolInfo] | None:
     """
     Retrieve liquidity pools that contain a specific token.
 
@@ -557,6 +566,7 @@ async def get_pools_by_token(token_address: str, limit: int = 30, offset: int = 
         limit (int): The maximum number of pools to retrieve.
         offset (int): The starting point for pagination.
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        use_cache (bool): Whether to use cached data. Defaults to True.
 
     Returns:
         list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
@@ -564,23 +574,21 @@ async def get_pools_by_token(token_address: str, limit: int = 30, offset: int = 
     token_address = Web3.to_checksum_address(token_address)
     if not token_address:
         raise ValueError("Token address must be provided.")
-    
-    
-    with get_chain(chainId) as chain:
-        # 1. get all pools
-        pools = chain.get_pools()
-        if not pools:
-            return None
-        
-        # 2. filter by specific token
-        pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
-        pools = sorted(pools, key=lambda p: p.tvl, reverse=True)
-        pools = pools[offset:offset+limit]
-        return [LiquidityPoolInfo.from_pool(p) for p in pools]
+
+    # 1. get all pools from cache or chain
+    pools = _get_cached_pools(chainId) if use_cache else _get_pools_from_chain(chainId)
+    if not pools:
+        return None
+
+    # 2. filter by specific token
+    pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
+    pools = sorted(pools, key=lambda p: p.tvl, reverse=True)
+    pools = pools[offset:offset+limit]
+    return [LiquidityPoolInfo.from_pool(p) for p in pools]
     
 
 @mcp.tool()
-async def get_pools_by_pair(token0_address: str, token1_address: str, limit: int = 30, offset: int = 0, chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+async def get_pools_by_pair(token0_address: str, token1_address: str, limit: int = 30, offset: int = 0, chainId: str = "10", use_cache: bool = True) -> list[LiquidityPoolInfo] | None:
     """
     Retrieve liquidity pools that contain a specific token pair.
 
@@ -590,6 +598,7 @@ async def get_pools_by_pair(token0_address: str, token1_address: str, limit: int
         limit (int): The maximum number of pools to retrieve.
         offset (int): The starting point for pagination.
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        use_cache (bool): Whether to use cached data. Defaults to True.
 
     Returns:
         list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
@@ -598,22 +607,21 @@ async def get_pools_by_pair(token0_address: str, token1_address: str, limit: int
     token1_address = Web3.to_checksum_address(token1_address)
     if not token0_address or not token1_address:
         raise ValueError("Both token addresses must be provided.")
-    
-    with get_chain(chainId) as chain:
-        # 1. get all pools
-        pools = chain.get_pools()
-        if not pools:
-            return None
-        
-        # 2. filter by specific token pair
-        pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
-        pools = sorted(pools, key=lambda p: p.tvl, reverse=True)
-        pools = pools[offset:offset+limit]
-        return [LiquidityPoolInfo.from_pool(p) for p in pools]
+
+    # 1. get all pools from cache or chain
+    pools = _get_cached_pools(chainId) if use_cache else _get_pools_from_chain(chainId)
+    if not pools:
+        return None
+
+    # 2. filter by specific token pair
+    pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
+    pools = sorted(pools, key=lambda p: p.tvl, reverse=True)
+    pools = pools[offset:offset+limit]
+    return [LiquidityPoolInfo.from_pool(p) for p in pools]
     
 
 @mcp.tool()
-async def get_pool_list(token_address_list: list[str] = None, pool_type: str = "all",  sort_by: str = "tvl", limit: int = 30, offset: int = 0, chainId: str = "10") -> list[LiquidityPoolInfo] | None:
+async def get_pool_list(token_address_list: list[str] = None, pool_type: str = "all",  sort_by: str = "tvl", limit: int = 30, offset: int = 0, chainId: str = "10", use_cache: bool = True) -> list[LiquidityPoolInfo] | None:
     """
     Retrieve liquidity pools based on specified criteria.
 
@@ -624,6 +632,7 @@ async def get_pool_list(token_address_list: list[str] = None, pool_type: str = "
         limit (int): The maximum number of pools to retrieve.
         offset (int): The starting point for pagination.
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
+        use_cache (bool): Whether to use cached data. Defaults to True.
 
     Returns:
         list[LiquidityPoolInfo] | None: A list of liquidity pool information or None if not found.
@@ -639,56 +648,75 @@ async def get_pool_list(token_address_list: list[str] = None, pool_type: str = "
         if hasattr(amount_obj, 'amount_in_stable') and amount_obj.amount_in_stable is not None:
             return amount_obj.amount_in_stable
         return default
-    
-    with get_chain(chainId) as chain:
-        # 1. get all pools
-        pools = chain.get_pools()
-        if not pools:
-            return None
-        
-        # 2. filter by token_address_list
-        if token_address_list is not None:
-            if token_address_list and len(token_address_list) == 1:
-                token_address = Web3.to_checksum_address(token_address_list[0])
-                pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
-            elif token_address_list and len(token_address_list) == 2:
-                token0_address = Web3.to_checksum_address(token_address_list[0])
-                token1_address = Web3.to_checksum_address(token_address_list[1])
-                pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
-            else:   
-                raise ValueError("Only One or two tokens are supported for filtering.")
 
-        
-        # 3. filter by pool type
-        if pool_type not in ["v2", "v3", "all"]:
-            raise ValueError("Unsupported pool_type. Use 'v2', 'v3', or 'all'.")
-        if pool_type == "v2":
-            pools = [p for p in pools if not p.is_cl]
-        elif pool_type == "v3":
-            pools = [p for p in pools if p.is_cl]
-        
-        # 4. sort by given criteria
-        if sort_by == "tvl":
-            pools.sort(key=lambda p: p.tvl, reverse=True)
-        elif sort_by == "volume":
-            # fix bug: some pools may have volume as Float or None
-            pools.sort(key=lambda p: safe_get_amount_in_stable(p.volume), reverse=True)
-        elif sort_by == "apr":
-            pools.sort(key=lambda p: p.apr, reverse=True)
+    # 1. get all pools from cache or chain
+    pools = _get_cached_pools(chainId) if use_cache else _get_pools_from_chain(chainId)
+    if not pools:
+        return None
+
+    # 2. filter by token_address_list
+    if token_address_list is not None:
+        if token_address_list and len(token_address_list) == 1:
+            token_address = Web3.to_checksum_address(token_address_list[0])
+            pools = [p for p in pools if p.token0.token_address == token_address or p.token1.token_address == token_address]
+        elif token_address_list and len(token_address_list) == 2:
+            token0_address = Web3.to_checksum_address(token_address_list[0])
+            token1_address = Web3.to_checksum_address(token_address_list[1])
+            pools = [p for p in pools if (p.token0.token_address == token0_address and p.token1.token_address == token1_address) or (p.token0.token_address == token1_address and p.token1.token_address == token0_address)]
         else:
-            raise ValueError("Unsupported sort_by criteria. Use 'tvl', 'volume', or 'apr'.")
-        
-        pools = pools[offset:offset+limit]
-        return [LiquidityPoolInfo.from_pool(p) for p in pools]
+            raise ValueError("Only One or two tokens are supported for filtering.")
+
+    # 3. filter by pool type
+    if pool_type not in ["v2", "v3", "all"]:
+        raise ValueError("Unsupported pool_type. Use 'v2', 'v3', or 'all'.")
+    if pool_type == "v2":
+        pools = [p for p in pools if not p.is_cl]
+    elif pool_type == "v3":
+        pools = [p for p in pools if p.is_cl]
+
+    # 4. sort by given criteria
+    if sort_by == "tvl":
+        pools.sort(key=lambda p: p.tvl, reverse=True)
+    elif sort_by == "volume":
+        # fix bug: some pools may have volume as Float or None
+        pools.sort(key=lambda p: safe_get_amount_in_stable(p.volume), reverse=True)
+    elif sort_by == "apr":
+        pools.sort(key=lambda p: p.apr, reverse=True)
+    else:
+        raise ValueError("Unsupported sort_by criteria. Use 'tvl', 'volume', or 'apr'.")
+
+    pools = pools[offset:offset+limit]
+    return [LiquidityPoolInfo.from_pool(p) for p in pools]
  
 
 def main():
+    # Check required environment variables
     if not os.environ.get("SUGAR_PK"):
-        raise ValueError(
-            "Environment variable SUGAR_PK is not set. Please set it to your private key."
-        )
+        raise ValueError("Environment variable SUGAR_PK is not set. Please set it to your private key.")
+
+    if not os.environ.get("SUGAR_RPC_URI_8453"):
+        raise ValueError("Environment variable SUGAR_RPC_URI_8453 is not set. Please set it to your Base chain RPC URI.")
+
     print("Starting Sugar MCP server...")
-    mcp.run(transport="stdio")
+
+    # Check if we should skip cache initialization (useful for debugging)
+    skip_cache_init = os.environ.get("SKIP_CACHE_INIT", "false").lower() == "true"
+
+    if not skip_cache_init:
+        # Configure cache settings (visible configuration data)
+        cache_config = CacheConfig(
+            duration_minutes=30,  # Cache for 30 minutes
+            enabled_chain_ids=["8453"],  # Only cache Base chain to reduce memory usage
+            filter_invalid_pools=True  # Filter out pools with invalid data
+        )
+
+        # Configure and start the cache system
+        start_cache_system(cache_config)
+    else:
+        print("⚠️  Skipping cache initialization (SKIP_CACHE_INIT=true)")
+        print("🚀 Server ready! (without cache)")
+
+    mcp.run(transport="sse")
 
 
 if __name__ == "__main__":

@@ -1,16 +1,15 @@
 # Sugar MCP Server
 
-This is an **MCP (Model Context Protocol)** server to interact with [Sugar](https://github.com/velodrome-finance/sugar-sdk)  
+This is an **MCP (Model Context Protocol)** server to interact with [Sugar](https://github.com/velodrome-finance/sugar-sdk)
 Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
-
-
-
 
 ## Components
 
 ### Environment Variables
-- `SUGAR_PK`: The public key for the SUGAR service.
-- `SUGAR_RPC_URI_10`: The RPC URI for the SUGAR service.
+
+- `SUGAR_PK`: Private key for the SUGAR service (required for all operations).
+- `SUGAR_RPC_URI_8453`: RPC URI for Base chain (required for blockchain interactions).
+- `SKIP_CACHE_INIT`: Set to "true" to skip cache initialization during development (optional, default: false).
 
 ### Tools
 
@@ -27,14 +26,15 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 - get_pools_by_pair: Retrieve liquidity pools that contain a specific token pair.
 - get_pool_list: Retrieve liquidity pools based on specified criteria.
 
-### Usage
+## Usage
+
 ```json
 {
   "mcpServers": {
     "sugar-mcp": {
       "env": {
-        "SUGAR_PK": "xxx",
-        "SUGAR_RPC_URI_10": "optionally, the RPC URI for the SUGAR service"
+        "SUGAR_PK": "your_private_key_here",
+        "SUGAR_RPC_URI_8453": "https://your-base-rpc-endpoint"
       },
       "command": "uvx",
       "args": [
@@ -45,26 +45,30 @@ Sugar makes Velodrome and Aerodrome devs life sweeter 🍭
 }
 ```
 
-### Building and Publishing to PyPI
+## Building and Publishing to PyPI
 
 To build and publish this package to PyPI:
 
 1. Install build dependencies:
-```bash
-pip install build twine
-```
+
+   ```bash
+   pip install build twine
+   ```
 
 2. Build the package:
-```bash
-python -m build
-```
+
+   ```bash
+   python -m build
+   ```
 
 3. Upload to PyPI:
-```bash
-twine upload dist/*
-```
+
+   ```bash
+   twine upload dist/*
+   ```
 
 Or if using Poetry (as specified in pyproject.toml):
+
 ```bash
 poetry build
 poetry publish
