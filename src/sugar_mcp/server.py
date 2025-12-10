@@ -11,7 +11,7 @@ from typing import Optional, List, Tuple
 from sugar_mcp.cache import _get_cached_pools, _get_pool_from_cache, _get_pools_from_chain, _get_pool_from_chain, start_background_updates, set_enabled_chains, set_pool_filtering, set_cache_duration_minutes, configure_cache, CacheConfig, start_cache_system
 
 
-mcp = FastMCP("sugar-mcp", port=8089)
+mcp = FastMCP("sugar-mcp", port=8089, host="0.0.0.0")
 
 
 
@@ -716,7 +716,7 @@ def main():
         print("⚠️  Skipping cache initialization (SKIP_CACHE_INIT=true)")
         print("🚀 Server ready! (without cache)")
 
-    mcp.run(transport="sse")
+    mcp.run(transport="sse", host='0.0.0.0')
 
 
 if __name__ == "__main__":
