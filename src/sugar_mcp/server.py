@@ -716,7 +716,7 @@ def main():
         print("⚠️  Skipping cache initialization (SKIP_CACHE_INIT=true)")
         print("🚀 Server ready! (without cache)")
 
-    mcp.run(transport="sse", host='0.0.0.0')
+    mcp.run(transport="sse")
 
 
 if __name__ == "__main__":
