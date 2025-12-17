@@ -496,65 +496,6 @@ async def get_quote(
         quote = chain.get_quote(from_token, to_token, amount)
         return QuoteInfo.from_quote(quote) if quote else None
 
-
-@mcp.tool()
-async def swap(
-    from_token: str,
-    to_token: str,
-    amount: int,
-    slippage: Optional[float] = None,
-    chainId: str = "10",
-) -> str:
-    """
-    Execute a token swap transaction.
-
-    Args:
-        from_token (str): The token being sold. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
-        to_token (str): The token being bought. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
-        amount (int): The amount of `from_token` to swap (unit is wei).
-        slippage (float, optional): Maximum acceptable slippage (default uses config value).
-        chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
-
-    Returns:
-        TransactionReceipt: The transaction receipt from the swap execution.
-    """
-
-    if chainId == "10" and (
-        from_token not in ["usdc", "velo", "eth", "o_usdt"]
-        or to_token not in ["usdc", "velo", "eth", "o_usdt"]
-    ):
-        raise ValueError(
-            "Only 'usdc', 'velo', 'eth', and 'o_usdt' are supported on OPChain."
-        )
-
-    if chainId == "130" and (
-        from_token not in ["o_usdt", "usdc"] or to_token not in ["o_usdt", "usdc"]
-    ):
-        raise ValueError("Only 'o_usdt' and 'usdc' are supported on Unichain.")
-
-    if chainId == "1135" and (
-        from_token not in ["o_usdt", "lsk", "eth", "usdt"]
-        or to_token not in ["o_usdt", "lsk", "eth", "usdt"]
-    ):
-        raise ValueError(
-            "Only 'o_usdt', 'lsk', 'eth', and 'usdt' are supported on List."
-        )
-
-    if chainId == "8453" and (
-        from_token not in ["usdc", "aero", "eth"]
-        or to_token not in ["usdc", "aero", "eth"]
-    ):
-        raise ValueError("Only 'usdc', 'aero', and 'eth' are supported on BaseChain.")
-
-    with get_chain(chainId) as chain:
-        from_token = getattr(chain, from_token, None)
-        to_token = getattr(chain, to_token, None)
-        if from_token is None or to_token is None:
-            raise ValueError("Invalid token specified. Use 'usdc', 'velo', or 'eth'.")
-
-        tx_hash = chain.swap(from_token, to_token, amount, slippage)
-        return tx_hash
-
     
 @mcp.tool()
 async def get_pools_by_token(token_address: str, limit: int = 30, offset: int = 0,  chainId: str = "10", use_cache: bool = True) -> list[LiquidityPoolInfo] | None:
