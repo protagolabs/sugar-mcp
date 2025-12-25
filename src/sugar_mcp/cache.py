@@ -61,6 +61,7 @@ class PoolsCache:
         """
         # If enabled_chain_ids is set and chain_id is not in the list, fetch directly without caching
         if self.enabled_chain_ids is not None and chain_id not in self.enabled_chain_ids:
+            print(f"[CACHE.get_pools] ⚠️  Chain {chain_id} not in enabled_chain_ids {self.enabled_chain_ids}, fetching directly from chain")
             try:
                 with get_chain(chain_id) as chain:
                     result = chain.get_pools()
@@ -79,8 +80,14 @@ class PoolsCache:
             # Check if we have valid cached data
             if chain_id in self.cache:
                 cache_entry = self.cache[chain_id]
-                if now - cache_entry["last_updated"] < self.cache_duration:
+                age = now - cache_entry["last_updated"]
+                if age < self.cache_duration:
+                    print(f"[CACHE.get_pools] ✅ Found valid cache for chain {chain_id}: {len(cache_entry['pools'])} pools, age: {age.total_seconds():.1f}s")
                     return cache_entry["pools"]
+                else:
+                    print(f"[CACHE.get_pools] ⚠️  Cache expired for chain {chain_id}: age {age.total_seconds():.1f}s > {self.cache_duration.total_seconds():.1f}s, will refresh")
+            else:
+                print(f"[CACHE.get_pools] ⚠️  No cache entry found for chain {chain_id}, will fetch from chain")
 
         # Cache is stale or doesn't exist, need to fetch new data
         # Use per-chain lock to prevent multiple concurrent fetches for the same chain
@@ -90,11 +97,16 @@ class PoolsCache:
                 if chain_id in self.cache:
                     cache_entry = self.cache[chain_id]
                     now = datetime.now()
-                    if now - cache_entry["last_updated"] < self.cache_duration:
+                    age = now - cache_entry["last_updated"]
+                    if age < self.cache_duration:
+                        print(f"[CACHE.get_pools] ✅ Cache was updated by another thread for chain {chain_id}: {len(cache_entry['pools'])} pools")
                         return cache_entry["pools"]
 
             # Still need to fetch, do it now
-            return self._fetch_and_cache_pools(chain_id, datetime.now())
+            print(f"[CACHE.get_pools] 🔄 Fetching pools from chain {chain_id} and caching...")
+            result = self._fetch_and_cache_pools(chain_id, datetime.now())
+            print(f"[CACHE.get_pools] ✅ Fetched and cached {len(result)} pools for chain {chain_id}")
+            return result
 
     def _get_fetch_lock(self, chain_id: str) -> threading.Lock:
         """Get or create a fetch lock for the specified chain."""

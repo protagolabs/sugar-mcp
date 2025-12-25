@@ -1,5 +1,10 @@
 import os
+import sys
 import time
+from pathlib import Path
+
+# Add src to path for direct execution
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server.fastmcp import FastMCP
 from netmind_sugar.chains import get_chain, Token, Price, LiquidityPool, Quote, LiquidityPoolForSwap
@@ -12,8 +17,6 @@ from sugar_mcp.cache import _get_cached_pools, _get_pool_from_cache, _get_pools_
 
 
 mcp = FastMCP("sugar-mcp", port=8089, host="0.0.0.0")
-
-
 
 
 class TokenInfo(BaseModel):
@@ -92,9 +95,6 @@ class LiquidityPoolInfo(BaseModel):
     token1_volume: float = Field(..., description="Token1 volume in stable token")
     gauge_staked_pct: float = Field(..., description="Gauge staked percentage")
     apr: float = Field(..., description="Annual percentage rate")
-    
-
-
 
     @staticmethod
     def from_pool(p: LiquidityPool):
@@ -152,6 +152,44 @@ class LiquidityPoolForSwapInfo(BaseModel):
             token0_address=p.token0_address,
             token1_address=p.token1_address
         )
+
+
+def _convert_pools_to_swap_format(pools: List[LiquidityPool]) -> List[LiquidityPoolForSwap]:
+    """
+    Convert cached LiquidityPool objects to LiquidityPoolForSwap format.
+    This allows using cached pool addresses while still getting real-time quotes.
+    """
+    result = []
+    for p in pools:
+        try:
+            # Ensure all fields are the correct type
+            pool_type = p.type
+            if isinstance(pool_type, str):
+                pool_type = int(pool_type)
+            elif pool_type is None:
+                pool_type = 0
+            else:
+                pool_type = int(pool_type)
+            
+            # Create the pool object and verify type is int
+            pool_obj = LiquidityPoolForSwap(
+                chain_id=str(p.chain_id),
+                chain_name=str(p.chain_name),
+                lp=str(p.lp),
+                type=pool_type,
+                token0_address=str(p.token0.token_address),
+                token1_address=str(p.token1.token_address)
+            )
+            
+            # Verify type is actually int (this will catch any type issues)
+            if not isinstance(pool_obj.type, int):
+                raise TypeError(f"Pool type must be int, got {type(pool_obj.type)}: {pool_obj.type}")
+            
+            result.append(pool_obj)
+        except Exception as e:
+            print(f"Error converting pool {p.lp}: {e}, type={type(p.type)}, value={p.type}")
+            raise
+    return result
 
 class LiquidityPoolEpochInfo(BaseModel):
     ts: int = Field(..., description="Timestamp of the epoch")
@@ -407,10 +445,19 @@ async def get_pools_for_swaps(limit: int, offset: int, chainId: str = "10", use_
     Returns:
         List[LiquidityPoolForSwap]: A list of simplified pool objects for swaps.
     """
+    # Get pools (either from cache or chain) - returns List[LiquidityPool]
     pools = _get_cached_pools(chainId) if use_cache else _get_pools_from_chain(chainId)
-    # Filter pools suitable for swaps (assuming all cached pools can be used for swaps)
+    
+    if not pools:
+        return []
+    
+    # Convert LiquidityPool to LiquidityPoolForSwap format
+    pools_for_swap = _convert_pools_to_swap_format(pools)
+    
     # Apply pagination
-    paginated_pools = pools[offset:offset + limit]
+    paginated_pools = pools_for_swap[offset:offset + limit]
+    
+    # Convert to Info objects
     return [LiquidityPoolForSwapInfo.from_pool(p) for p in paginated_pools]
 
 
@@ -460,6 +507,7 @@ async def get_quote(
     to_token: str,
     amount: int,
     chainId: str = "10",
+    use_cache: bool = True,
 ) -> Optional[QuoteInfo]:
     """
     Retrieve the best quote for swapping a given amount from one token to another.
@@ -469,7 +517,7 @@ async def get_quote(
         to_token (str): The token to swap to. For OPchain, this can be 'usdc', 'velo', 'eth', or 'o_usdt'. For BaseChain, this can be 'usdc', 'aero', or 'eth'. For Unichain, this can be 'o_usdt' or 'usdc'. For Lisk, this can be 'o_usdt', 'lsk', 'eth', or 'usdt'.
         amount (int): The amount to swap (unit is wei).
         chainId (str): The chain ID to use ('10' for OPChain, '8453' for BaseChain, '130' for Unichain, '1135' for List)
-        filter_quotes (Callable[[Quote], bool], optional): Optional filter to apply on the quotes.
+        use_cache (bool): Whether to use cached pool addresses. Defaults to True. When True, uses cached pool addresses to speed up the initial pool lookup, but still gets real-time quotes. When False, fetches pool addresses from chain (slower but ensures latest pool list).
 
     Returns:
         Optional[Quote]: The best available quote, or None if no valid quote was found.
@@ -488,12 +536,60 @@ async def get_quote(
         raise ValueError("Only 'usdc', 'aero', and 'eth' are supported on BaseChain.")
 
     with get_chain(chainId) as chain:
-        from_token = getattr(chain, from_token, None)
-        to_token = getattr(chain, to_token, None)
-        if from_token is None or to_token is None:
+        from_token_obj = getattr(chain, from_token, None)
+        to_token_obj = getattr(chain, to_token, None)
+        if from_token_obj is None or to_token_obj is None:
             raise ValueError("Invalid token specified.")
 
-        quote = chain.get_quote(from_token, to_token, amount)
+        # Optimize: Use cached pool addresses if available and use_cache is True
+        # This speeds up pool lookup while still getting real-time quotes
+        if use_cache:
+            print(f"[get_quote] use_cache=True, checking cache for chain {chainId}")
+            # Check cache configuration
+            from sugar_mcp.cache import _cache
+            print(f"[get_quote] Cache enabled_chain_ids: {_cache.enabled_chain_ids}")
+            print(f"[get_quote] Cache has data for chains: {list(_cache.cache.keys()) if hasattr(_cache, 'cache') else 'N/A'}")
+            
+            cached_pools = _get_cached_pools(chainId)
+            print(f"[get_quote] _get_cached_pools returned: {len(cached_pools) if cached_pools else 0} pools")
+            
+            if cached_pools:
+                print(f"[get_quote] ✅ Found {len(cached_pools)} cached pools, using cache for pool lookup")
+                try:
+                    # Convert cached LiquidityPool to LiquidityPoolForSwap format
+                    # This only uses pool addresses from cache, quotes are still real-time
+                    pools_for_swap = _convert_pools_to_swap_format(cached_pools)
+                    print(f"[get_quote] ✅ Converted {len(pools_for_swap)} pools to swap format")
+                    
+                    # Temporarily replace get_pools_for_swaps to use cached pools
+                    # This optimizes the pool lookup while get_quote still gets real-time liquidity data
+                    original_get_pools_for_swaps = chain.get_pools_for_swaps
+                    chain.get_pools_for_swaps = lambda: pools_for_swap
+                    print(f"[get_quote] ✅ Replaced get_pools_for_swaps method to use cached pools")
+                    
+                    try:
+                        print(f"[get_quote] 🔄 Calling chain.get_quote() with cached pools (quotes will be real-time)")
+                        quote = chain.get_quote(from_token_obj, to_token_obj, amount)
+                        print(f"[get_quote] ✅ Successfully got quote using cached pools")
+                        return QuoteInfo.from_quote(quote) if quote else None
+                    finally:
+                        # Restore original method
+                        chain.get_pools_for_swaps = original_get_pools_for_swaps
+                        print(f"[get_quote] ✅ Restored original get_pools_for_swaps method")
+                except Exception as e:
+                    # If conversion or quote fails, fall back to original method
+                    print(f"[get_quote] ❌ Failed to use cached pools, falling back to chain query: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"[get_quote] ⚠️  No cached pools found for chain {chainId}, falling back to chain query")
+        else:
+            print(f"[get_quote] use_cache=False, fetching pools directly from chain {chainId}")
+        
+        # Fallback to original method (use_cache=False or cache miss)
+        print(f"[get_quote] 🔄 Fetching pools from chain {chainId} (this may take a few seconds)")
+        quote = chain.get_quote(from_token_obj, to_token_obj, amount)
+        print(f"[get_quote] ✅ Got quote from chain")
         return QuoteInfo.from_quote(quote) if quote else None
 
     
