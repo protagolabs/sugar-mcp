@@ -544,52 +544,32 @@ async def get_quote(
         # Optimize: Use cached pool addresses if available and use_cache is True
         # This speeds up pool lookup while still getting real-time quotes
         if use_cache:
-            print(f"[get_quote] use_cache=True, checking cache for chain {chainId}")
-            # Check cache configuration
-            from sugar_mcp.cache import _cache
-            print(f"[get_quote] Cache enabled_chain_ids: {_cache.enabled_chain_ids}")
-            print(f"[get_quote] Cache has data for chains: {list(_cache.cache.keys()) if hasattr(_cache, 'cache') else 'N/A'}")
-            
             cached_pools = _get_cached_pools(chainId)
-            print(f"[get_quote] _get_cached_pools returned: {len(cached_pools) if cached_pools else 0} pools")
-            
             if cached_pools:
-                print(f"[get_quote] ✅ Found {len(cached_pools)} cached pools, using cache for pool lookup")
                 try:
                     # Convert cached LiquidityPool to LiquidityPoolForSwap format
                     # This only uses pool addresses from cache, quotes are still real-time
                     pools_for_swap = _convert_pools_to_swap_format(cached_pools)
-                    print(f"[get_quote] ✅ Converted {len(pools_for_swap)} pools to swap format")
                     
                     # Temporarily replace get_pools_for_swaps to use cached pools
                     # This optimizes the pool lookup while get_quote still gets real-time liquidity data
                     original_get_pools_for_swaps = chain.get_pools_for_swaps
                     chain.get_pools_for_swaps = lambda: pools_for_swap
-                    print(f"[get_quote] ✅ Replaced get_pools_for_swaps method to use cached pools")
                     
                     try:
-                        print(f"[get_quote] 🔄 Calling chain.get_quote() with cached pools (quotes will be real-time)")
                         quote = chain.get_quote(from_token_obj, to_token_obj, amount)
-                        print(f"[get_quote] ✅ Successfully got quote using cached pools")
                         return QuoteInfo.from_quote(quote) if quote else None
                     finally:
                         # Restore original method
                         chain.get_pools_for_swaps = original_get_pools_for_swaps
-                        print(f"[get_quote] ✅ Restored original get_pools_for_swaps method")
                 except Exception as e:
                     # If conversion or quote fails, fall back to original method
-                    print(f"[get_quote] ❌ Failed to use cached pools, falling back to chain query: {e}")
+                    print(f"Warning: Failed to use cached pools, falling back to chain query: {e}")
                     import traceback
                     traceback.print_exc()
-            else:
-                print(f"[get_quote] ⚠️  No cached pools found for chain {chainId}, falling back to chain query")
-        else:
-            print(f"[get_quote] use_cache=False, fetching pools directly from chain {chainId}")
         
         # Fallback to original method (use_cache=False or cache miss)
-        print(f"[get_quote] 🔄 Fetching pools from chain {chainId} (this may take a few seconds)")
         quote = chain.get_quote(from_token_obj, to_token_obj, amount)
-        print(f"[get_quote] ✅ Got quote from chain")
         return QuoteInfo.from_quote(quote) if quote else None
 
     
