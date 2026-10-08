@@ -1,4 +1,5 @@
 import os
+import threading
 import sys
 import time
 from pathlib import Path
@@ -13,7 +14,7 @@ from pydantic import Field, BaseModel
 from web3 import Web3
 
 from typing import Optional, List, Tuple
-from sugar_mcp.cache import _get_cached_pools, _get_pool_from_cache, _get_pools_from_chain, _get_pool_from_chain, start_background_updates, set_enabled_chains, set_pool_filtering, set_cache_duration_minutes, configure_cache, CacheConfig, start_cache_system
+from sugar_mcp.cache import log, _get_cached_pools, _get_pool_from_cache, _get_pools_from_chain, _get_pool_from_chain, start_background_updates, set_enabled_chains, set_pool_filtering, set_cache_duration_minutes, configure_cache, CacheConfig, start_cache_system
 
 
 mcp = FastMCP("sugar-mcp", port=8089, host="0.0.0.0")
@@ -187,7 +188,7 @@ def _convert_pools_to_swap_format(pools: List[LiquidityPool]) -> List[LiquidityP
             
             result.append(pool_obj)
         except Exception as e:
-            print(f"Error converting pool {p.lp}: {e}, type={type(p.type)}, value={p.type}")
+            log(f"Error converting pool {p.lp}: {e}, type={type(p.type)}, value={p.type}")
             raise
     return result
 
@@ -564,7 +565,7 @@ async def get_quote(
                         chain.get_pools_for_swaps = original_get_pools_for_swaps
                 except Exception as e:
                     # If conversion or quote fails, fall back to original method
-                    print(f"Warning: Failed to use cached pools, falling back to chain query: {e}")
+                    log(f"Warning: Failed to use cached pools, falling back to chain query: {e}")
                     import traceback
                     traceback.print_exc()
         
@@ -714,7 +715,11 @@ def main():
     if not os.environ.get("SUGAR_RPC_URI_8453"):
         raise ValueError("Environment variable SUGAR_RPC_URI_8453 is not set. Please set it to your Base chain RPC URI.")
 
-    print("Starting Sugar MCP server...")
+    transport = os.environ.get("SUGAR_MCP_TRANSPORT", "stdio")
+    if transport not in ("stdio", "sse"):
+        raise ValueError(f"SUGAR_MCP_TRANSPORT must be 'stdio' or 'sse', got {transport!r}")
+
+    log(f"Starting Sugar MCP server ({transport})...")
 
     # Check if we should skip cache initialization (useful for debugging)
     skip_cache_init = os.environ.get("SKIP_CACHE_INIT", "false").lower() == "true"
@@ -727,13 +732,17 @@ def main():
             filter_invalid_pools=True  # Filter out pools with invalid data
         )
 
-        # Configure and start the cache system
-        start_cache_system(cache_config)
+        # Each stdio client spawns its own process, so warming the cache must not
+        # delay the MCP handshake; tools fetch on demand until it is ready.
+        if transport == "stdio":
+            threading.Thread(target=start_cache_system, args=(cache_config,), daemon=True).start()
+        else:
+            start_cache_system(cache_config)
     else:
-        print("⚠️  Skipping cache initialization (SKIP_CACHE_INIT=true)")
-        print("🚀 Server ready! (without cache)")
+        log("⚠️  Skipping cache initialization (SKIP_CACHE_INIT=true)")
+        log("🚀 Server ready! (without cache)")
 
-    mcp.run(transport="sse")
+    mcp.run(transport=transport)
 
 
 if __name__ == "__main__":

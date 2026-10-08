@@ -1,4 +1,10 @@
+import sys
 import threading
+
+
+def log(msg: str) -> None:
+    """Write diagnostics to stderr; stdout is the MCP protocol channel in stdio mode."""
+    print(msg, file=sys.stderr, flush=True)
 import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -65,11 +71,11 @@ class PoolsCache:
                 with get_chain(chain_id) as chain:
                     result = chain.get_pools()
                     if not isinstance(result, list):
-                        print(f"Warning: chain.get_pools() returned {type(result)} instead of list for chain {chain_id}")
+                        log(f"Warning: chain.get_pools() returned {type(result)} instead of list for chain {chain_id}")
                         return []
                     return result
             except Exception as e:
-                print(f"Failed to get pools from chain {chain_id}: {type(e).__name__}: {str(e)}")
+                log(f"Failed to get pools from chain {chain_id}: {type(e).__name__}: {str(e)}")
                 return []
 
         # Use double-checked locking with per-chain fetch locks to prevent cache storms
@@ -162,7 +168,7 @@ class PoolsCache:
                 invalid_count += 1
 
         if invalid_count > 0:
-            print(f"Filtered out {invalid_count} invalid pools, kept {len(valid_pools)} valid pools")
+            log(f"Filtered out {invalid_count} invalid pools, kept {len(valid_pools)} valid pools")
 
         return valid_pools
 
@@ -193,7 +199,7 @@ class PoolsCache:
 
             # Validate the result
             if not isinstance(pools, list):
-                print(f"Warning: chain.get_pools() returned {type(pools)} instead of list for chain {chain_id}")
+                log(f"Warning: chain.get_pools() returned {type(pools)} instead of list for chain {chain_id}")
                 pools = []
 
             # Filter invalid pools
@@ -206,7 +212,7 @@ class PoolsCache:
 
             return pools
         except Exception as e:
-            print(f"Failed to fetch and cache pools for chain {chain_id}: {type(e).__name__}: {str(e)}")
+            log(f"Failed to fetch and cache pools for chain {chain_id}: {type(e).__name__}: {str(e)}")
             # Cache empty list to avoid repeated failures
             self.cache[chain_id] = {
                 "pools": [],
@@ -221,7 +227,7 @@ class PoolsCache:
                 self.update_running = True
                 self.update_thread = threading.Thread(target=self._background_worker, daemon=True)
                 self.update_thread.start()
-                print("🔄 Background cache update thread started")
+                log("🔄 Background cache update thread started")
 
     def set_enabled_chains(self, chain_ids: Optional[List[str]]):
         """Set which chains should be cached. None means cache all chains.
@@ -237,7 +243,7 @@ class PoolsCache:
                                   if chain_id not in chain_ids]
                 for chain_id in chains_to_remove:
                     del self.cache[chain_id]
-                    print(f"Removed cache for disabled chain {chain_id}")
+                    log(f"Removed cache for disabled chain {chain_id}")
 
     def set_cache_duration_minutes(self, minutes: int):
         """Set the cache duration in minutes.
@@ -246,7 +252,7 @@ class PoolsCache:
             minutes (int): Cache duration in minutes
         """
         self.cache_duration = timedelta(minutes=minutes)
-        print(f"Cache duration set to {minutes} minutes")
+        log(f"Cache duration set to {minutes} minutes")
 
     def set_pool_filtering(self, enabled: bool):
         """Enable or disable pool filtering.
@@ -255,7 +261,7 @@ class PoolsCache:
             enabled (bool): Whether to filter out invalid pools
         """
         self.filter_invalid_pools = enabled
-        print(f"Pool filtering {'enabled' if enabled else 'disabled'}")
+        log(f"Pool filtering {'enabled' if enabled else 'disabled'}")
 
     def configure_cache(self, config: CacheConfig):
         """Configure the cache with a CacheConfig object.
@@ -287,10 +293,10 @@ class PoolsCache:
                 updated_count = self._update_all_caches()
 
                 if updated_count > 0:
-                    print(f"🔄 Cache updated: {updated_count} entries refreshed")
+                    log(f"🔄 Cache updated: {updated_count} entries refreshed")
 
             except Exception as e:
-                print(f"❌ Cache update error: {type(e).__name__}: {str(e)}")
+                log(f"❌ Cache update error: {type(e).__name__}: {str(e)}")
 
     def _update_all_caches(self):
         """Update all enabled cached chains that are older than cache duration.
@@ -331,7 +337,7 @@ class PoolsCache:
                                     self._fetch_and_cache_pools(chain_id, now)
                                     updated_count += 1
                 except Exception as e:
-                    print(f"Error updating cache for chain {chain_id}: {type(e).__name__}: {str(e)}")
+                    log(f"Error updating cache for chain {chain_id}: {type(e).__name__}: {str(e)}")
 
         return updated_count
 
@@ -349,7 +355,7 @@ def _get_cached_pools(chain_id: str) -> List[LiquidityPool]:
 
     # Log slow requests (>1 second)
     if duration > 1.0:
-        print(f"Slow cache request for chain {chain_id}: {duration:.2f}s")
+        log(f"Slow cache request for chain {chain_id}: {duration:.2f}s")
     return result
 
 
@@ -365,13 +371,13 @@ def _get_pools_from_chain(chain_id: str) -> List[LiquidityPool]:
             result = chain.get_pools()
             # Ensure we got a list back
             if not isinstance(result, list):
-                print(f"Warning: chain.get_pools() returned {type(result)} instead of list for chain {chain_id}")
+                log(f"Warning: chain.get_pools() returned {type(result)} instead of list for chain {chain_id}")
                 return []
             # Filter invalid pools
             filtered_result = _cache._filter_invalid_pools(result)
             return filtered_result
     except Exception as e:
-        print(f"Failed to get pools from chain {chain_id}: {type(e).__name__}: {str(e)}")
+        log(f"Failed to get pools from chain {chain_id}: {type(e).__name__}: {str(e)}")
         return []
 
 
@@ -381,7 +387,7 @@ def _get_pool_from_chain(chain_id: str, address: str) -> Optional[LiquidityPool]
         with get_chain(chain_id) as chain:
             return chain.get_pool_by_address(address)
     except Exception as e:
-        print(f"Failed to get pool {address} from chain {chain_id}: {type(e).__name__}: {str(e)}")
+        log(f"Failed to get pool {address} from chain {chain_id}: {type(e).__name__}: {str(e)}")
         return None
 
 
@@ -431,22 +437,22 @@ def start_cache_system(cache_config: CacheConfig):
     """Configure and start the cache system with the given configuration."""
     # Apply configuration and show summary
     configure_cache(cache_config)
-    print(f"🔧 Cache configured: {cache_config.duration_minutes}min duration, chains: {cache_config.enabled_chain_ids}, filtering: {'enabled' if cache_config.filter_invalid_pools else 'disabled'}")
+    log(f"🔧 Cache configured: {cache_config.duration_minutes}min duration, chains: {cache_config.enabled_chain_ids}, filtering: {'enabled' if cache_config.filter_invalid_pools else 'disabled'}")
 
     # Start background cache updates
     start_background_updates()
 
     # Pre-populate cache for enabled chains
-    print("📦 Initializing cache...")
+    log("📦 Initializing cache...")
     enabled_chains = cache_config.enabled_chain_ids or []
     for chain_id in enabled_chains:
         try:
             pools = _get_cached_pools(chain_id)
             if pools and len(pools) > 0:
-                print(f"✅ Cached {len(pools)} pools for chain {chain_id}")
+                log(f"✅ Cached {len(pools)} pools for chain {chain_id}")
             else:
-                print(f"⚠️  No pools found for chain {chain_id}")
+                log(f"⚠️  No pools found for chain {chain_id}")
         except Exception as e:
-            print(f"❌ Failed to cache chain {chain_id}: {type(e).__name__}: {str(e)}")
+            log(f"❌ Failed to cache chain {chain_id}: {type(e).__name__}: {str(e)}")
 
-    print("🚀 Server ready!")
+    log("🚀 Server ready!")
